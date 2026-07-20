@@ -48,7 +48,8 @@
       <!-- Tab Navigation -->
       <div id="input-tabs-wrap">
         <div class="tabs" id="input-tabs">
-          <button class="tab active" data-tab="sliders">HSV / RGB</button>
+          <button class="tab active" data-tab="sliders">Sliders</button>
+          <button class="tab" data-tab="wheel">Wheel</button>
           <button class="tab" data-tab="info">Info</button>
           <button class="tab" data-tab="harmonies">Harmonies</button>
         </div>
@@ -93,6 +94,11 @@
             <input type="number" class="slider-value" id="nv-b" min="0" max="255" value="242">
           </div>
         </div>
+      </div>
+
+      <!-- Tab: Color Wheel -->
+      <div class="panel-section tab-content" data-tab-content="wheel" style="padding:14px">
+        <canvas id="color-wheel" style="width:100%;display:block;touch-action:none;-webkit-tap-highlight-color:transparent;cursor:crosshair;border-radius:50%"></canvas>
       </div>
 
       <!-- Tab: Info -->
@@ -328,6 +334,7 @@ document.querySelectorAll('#input-tabs .tab').forEach(btn => {
     document.querySelectorAll('#input-panel .tab-content').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     document.querySelector(`.tab-content[data-tab-content="${btn.dataset.tab}"]`).classList.add('active');
+    if (btn.dataset.tab === 'wheel') drawWheel();
   });
 });
 
@@ -387,7 +394,166 @@ function render() {
   });
 
   renderHarmonies(h, s, v);
+  drawWheel();
   updateSelectedSwatch();
+}
+
+// ─── Color Wheel ──────────────────────────────────────────────────────────────
+
+const wheelCanvas = document.getElementById('color-wheel');
+const wheelCtx    = wheelCanvas.getContext('2d');
+let   wheelDrag   = null; // null | 'hue' | 'sv'
+
+function wheelDims() {
+  const W = wheelCanvas.offsetWidth;
+  const cx = W / 2, cy = W / 2;
+  const outerR = W / 2 - 3;
+  const innerR = outerR * 0.74;
+  const sqHalf = (innerR / Math.sqrt(2)) * 0.93;
+  return { W, cx, cy, outerR, innerR, sqHalf };
+}
+
+function drawWheel() {
+  const W = wheelCanvas.offsetWidth;
+  if (!W) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  if (wheelCanvas.width !== W * dpr || wheelCanvas.height !== W * dpr) {
+    wheelCanvas.width  = W * dpr;
+    wheelCanvas.height = W * dpr;
+  }
+  wheelCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  wheelCtx.clearRect(0, 0, W, W);
+
+  const { cx, cy, outerR, innerR, sqHalf } = wheelDims();
+
+  // ── Hue ring: 360 wedge segments ──────────────────────────────────────────
+  for (let i = 0; i < 360; i++) {
+    const a1 = ((i - 0.5) / 360) * Math.PI * 2 - Math.PI / 2;
+    const a2 = ((i + 0.5) / 360) * Math.PI * 2 - Math.PI / 2;
+    const { r, g, b } = hsvToRgb(i, 100, 100);
+    wheelCtx.beginPath();
+    wheelCtx.moveTo(cx, cy);
+    wheelCtx.arc(cx, cy, outerR, a1, a2);
+    wheelCtx.closePath();
+    wheelCtx.fillStyle = `rgb(${r},${g},${b})`;
+    wheelCtx.fill();
+  }
+
+  // Punch out inner circle to create the ring
+  wheelCtx.beginPath();
+  wheelCtx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  wheelCtx.fillStyle = '#191b1d';
+  wheelCtx.fill();
+
+  // ── SV square ─────────────────────────────────────────────────────────────
+  const sqX = cx - sqHalf, sqY = cy - sqHalf, sqSize = sqHalf * 2;
+  const { r: hr, g: hg, b: hb } = hsvToRgb(state.h, 100, 100);
+
+  // Saturation: left=white → right=pure hue
+  const satGrad = wheelCtx.createLinearGradient(sqX, 0, sqX + sqSize, 0);
+  satGrad.addColorStop(0, '#ffffff');
+  satGrad.addColorStop(1, `rgb(${hr},${hg},${hb})`);
+  wheelCtx.fillStyle = satGrad;
+  wheelCtx.fillRect(sqX, sqY, sqSize, sqSize);
+
+  // Value/brightness: top=transparent → bottom=black
+  const valGrad = wheelCtx.createLinearGradient(0, sqY, 0, sqY + sqSize);
+  valGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  valGrad.addColorStop(1, 'rgba(0,0,0,1)');
+  wheelCtx.fillStyle = valGrad;
+  wheelCtx.fillRect(sqX, sqY, sqSize, sqSize);
+
+  // Subtle border around the square
+  wheelCtx.strokeStyle = 'rgba(255,255,255,0.12)';
+  wheelCtx.lineWidth = 1;
+  wheelCtx.strokeRect(sqX, sqY, sqSize, sqSize);
+
+  // ── Hue ring handle ────────────────────────────────────────────────────────
+  const hueAngle = (state.h / 360) * Math.PI * 2 - Math.PI / 2;
+  const hRingR   = (outerR + innerR) / 2;
+  const hx = cx + Math.cos(hueAngle) * hRingR;
+  const hy = cy + Math.sin(hueAngle) * hRingR;
+
+  wheelCtx.beginPath();
+  wheelCtx.arc(hx, hy, 9, 0, Math.PI * 2);
+  wheelCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+  wheelCtx.lineWidth = 3;
+  wheelCtx.stroke();
+  wheelCtx.beginPath();
+  wheelCtx.arc(hx, hy, 9, 0, Math.PI * 2);
+  wheelCtx.strokeStyle = '#fff';
+  wheelCtx.lineWidth = 2;
+  wheelCtx.stroke();
+  wheelCtx.beginPath();
+  wheelCtx.arc(hx, hy, 6, 0, Math.PI * 2);
+  wheelCtx.fillStyle = `rgb(${hr},${hg},${hb})`;
+  wheelCtx.fill();
+
+  // ── SV handle ─────────────────────────────────────────────────────────────
+  const svX = sqX + (state.s / 100) * sqSize;
+  const svY = sqY + (1 - state.v / 100) * sqSize;
+
+  wheelCtx.beginPath();
+  wheelCtx.arc(svX, svY, 8, 0, Math.PI * 2);
+  wheelCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+  wheelCtx.lineWidth = 3;
+  wheelCtx.stroke();
+  wheelCtx.beginPath();
+  wheelCtx.arc(svX, svY, 8, 0, Math.PI * 2);
+  wheelCtx.strokeStyle = '#fff';
+  wheelCtx.lineWidth = 2;
+  wheelCtx.stroke();
+  wheelCtx.beginPath();
+  wheelCtx.arc(svX, svY, 5, 0, Math.PI * 2);
+  wheelCtx.fillStyle = rgbToHex(state.r, state.g, state.b);
+  wheelCtx.fill();
+}
+
+// ── Wheel interaction ──────────────────────────────────────────────────────
+wheelCanvas.addEventListener('pointerdown', e => {
+  const rect = wheelCanvas.getBoundingClientRect();
+  const scaleX = wheelCanvas.offsetWidth / rect.width;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top)  * scaleX;
+  const { cx, cy, outerR, innerR, sqHalf } = wheelDims();
+  const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+
+  if (dist >= innerR && dist <= outerR) {
+    wheelDrag = 'hue';
+    wheelCanvas.setPointerCapture(e.pointerId);
+    applyWheelHue(x, y, cx, cy);
+  } else if (x >= cx - sqHalf && x <= cx + sqHalf && y >= cy - sqHalf && y <= cy + sqHalf) {
+    wheelDrag = 'sv';
+    wheelCanvas.setPointerCapture(e.pointerId);
+    applyWheelSV(x, y, cx - sqHalf, cy - sqHalf, sqHalf * 2);
+  }
+});
+
+wheelCanvas.addEventListener('pointermove', e => {
+  if (!wheelDrag) return;
+  const rect = wheelCanvas.getBoundingClientRect();
+  const scaleX = wheelCanvas.offsetWidth / rect.width;
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top)  * scaleX;
+  const { cx, cy, sqHalf } = wheelDims();
+  if (wheelDrag === 'hue') applyWheelHue(x, y, cx, cy);
+  else                     applyWheelSV(x, y, cx - sqHalf, cy - sqHalf, sqHalf * 2);
+});
+
+wheelCanvas.addEventListener('pointerup',     () => { wheelDrag = null; });
+wheelCanvas.addEventListener('pointercancel', () => { wheelDrag = null; });
+
+function applyWheelHue(x, y, cx, cy) {
+  const angle = Math.atan2(y - cy, x - cx);
+  const hue   = ((angle + Math.PI / 2) / (Math.PI * 2) * 360 + 360) % 360;
+  fromHSV(hue, state.s, state.v);
+}
+
+function applyWheelSV(x, y, sqX, sqY, sqSize) {
+  const s = clamp((x - sqX) / sqSize * 100, 0, 100);
+  const v = clamp((1 - (y - sqY) / sqSize) * 100, 0, 100);
+  fromHSV(state.h, s, v);
 }
 
 // ─── Harmonies ────────────────────────────────────────────────────────────────
