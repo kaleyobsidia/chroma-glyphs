@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chroma — Color Palette Studio</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="color.js"></script>
+</head>
+<body>
+<div id="app">
+
+  <!-- Top Bar -->
+  <div id="topbar">
+    <h1>CHROMA <span>/ Color Palette Studio</span></h1>
+    <div class="topbar-actions">
+      <button class="btn sm" id="export-btn">⬇ Export JSON</button>
+      <button class="btn sm" id="import-btn">⬆ Import JSON</button>
+      <input type="file" id="import-file" accept=".json" style="display:none">
+    </div>
+  </div>
+
+  <div id="main">
+
+    <!-- ─── Left: Input Panel ──────────────────── -->
+    <div id="input-panel">
+
+      <!-- Color Preview -->
+      <div class="panel-section">
+        <div id="color-preview-wrap">
+          <div id="color-preview" title="Click to pick color">
+            <div id="color-preview-inner"></div>
+          </div>
+          <div id="color-data">
+            <div id="hex-display" title="Click to copy">#FFFFFF</div>
+            <div id="color-name-display">white</div>
+            <div id="contrast-display">vs white: — · vs black: —</div>
+          </div>
+        </div>
+        <div id="hex-input-row">
+          <input id="hex-input" type="text" placeholder="#HEX or color name" spellcheck="false">
+          <button class="btn sm primary" id="add-color-btn">+ Add</button>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div id="input-tabs-wrap">
+        <div class="tabs" id="input-tabs">
+          <button class="tab active" data-tab="sliders">HSV / RGB</button>
+          <button class="tab" data-tab="info">Info</button>
+          <button class="tab" data-tab="harmonies">Harmonies</button>
+        </div>
+      </div>
+
+      <!-- Tab: HSV / RGB Sliders -->
+      <div class="panel-section tab-content active" data-tab-content="sliders">
+        <div class="section-label">HSV</div>
+        <div class="slider-group">
+          <div class="slider-row">
+            <span class="slider-label">H°</span>
+            <input type="range" id="sl-h" min="0" max="360" value="210">
+            <input type="number" class="slider-value" id="nv-h" min="0" max="360" value="210">
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">S%</span>
+            <input type="range" id="sl-s" min="0" max="100" value="60">
+            <input type="number" class="slider-value" id="nv-s" min="0" max="100" value="60">
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">V%</span>
+            <input type="range" id="sl-v" min="0" max="100" value="95">
+            <input type="number" class="slider-value" id="nv-v" min="0" max="100" value="95">
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:18px">RGB</div>
+        <div class="slider-group">
+          <div class="slider-row">
+            <span class="slider-label" style="color:#e05c5c">R</span>
+            <input type="range" id="sl-r" min="0" max="255" value="97">
+            <input type="number" class="slider-value" id="nv-r" min="0" max="255" value="97">
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" style="color:#5ce05c">G</span>
+            <input type="range" id="sl-g" min="0" max="255" value="162">
+            <input type="number" class="slider-value" id="nv-g" min="0" max="255" value="162">
+          </div>
+          <div class="slider-row">
+            <span class="slider-label" style="color:#5c8af0">B</span>
+            <input type="range" id="sl-b" min="0" max="255" value="242">
+            <input type="number" class="slider-value" id="nv-b" min="0" max="255" value="242">
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Info -->
+      <div class="panel-section tab-content" data-tab-content="info">
+        <div class="section-label">Values <span style="font-size:9px;color:var(--text3)">(click to copy)</span></div>
+        <div class="color-values-grid" id="values-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Tab: Harmonies -->
+      <div class="panel-section tab-content" data-tab-content="harmonies">
+        <div class="harmony-row" id="harmony-row">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+    </div><!-- /input-panel -->
+
+    <!-- ─── Right: Random Generator + Palette ─── -->
+    <div id="right-panel">
+
+      <!-- Random Generator Panel -->
+      <div id="rng-panel">
+        <div id="rng-top-row">
+          <span class="section-label">Random Generator</span>
+          <div class="rng-control">
+            <label>Count</label>
+            <input type="number" class="rng-count-input" id="rng-count" min="1" max="32" value="5">
+          </div>
+          <div class="rng-control">
+            <label>Mode</label>
+            <select class="rng-select" id="rng-harmony">
+              <option value="none">None (free)</option>
+              <option value="analogous">Analogous</option>
+              <option value="complementary">Complementary</option>
+              <option value="triadic">Triadic</option>
+              <option value="splitComplementary">Split Comp.</option>
+              <option value="tetradic">Tetradic</option>
+              <option value="hueZones">Hue Zones</option>
+            </select>
+          </div>
+          <button class="btn sm primary" id="rng-generate-btn">⟳ Generate</button>
+          <button class="btn sm" id="rng-add-all-btn" style="display:none">+ All to Palette</button>
+        </div>
+
+        <!-- Hue Zones UI — only visible in hueZones mode -->
+        <div id="rng-zones-ui" style="display:none">
+          <div id="rng-zones-header">
+            <span class="section-label" style="margin-bottom:0">Hue Zones</span>
+            <button class="btn sm" id="rng-add-zone-btn">+ Add Zone</button>
+          </div>
+          <div id="rng-zones-list"><!-- zone cards rendered by JS --></div>
+        </div>
+
+        <!-- Anchor + Results -->
+        <div id="rng-output-row">
+          <div id="rng-anchor-area">
+            <div id="rng-anchor-swatch" title="Active color — seed for generation"></div>
+            <div id="rng-anchor-label">Seed</div>
+            <button id="rng-anchor-toggle" class="btn sm active">🔗 Linked</button>
+          </div>
+          <div id="rng-anchor-divider"></div>
+          <div id="rng-results">
+            <div class="rng-empty">Click Generate to create colors</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Palette Section -->
+      <div id="palette-section">
+        <div id="palette-header">
+          <h2>Palette</h2>
+          <button class="btn sm" id="add-cat-btn">+ Category</button>
+        </div>
+        <div id="palette-categories">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+    </div><!-- /right-panel -->
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Add to Palette Modal -->
+<div id="add-picker">
+  <div id="add-picker-inner">
+    <h3>Add Color to Palette</h3>
+    <div class="picker-preview" id="picker-preview-swatch"></div>
+    <div class="picker-hex" id="picker-hex-label"></div>
+    <div class="picker-cats" id="picker-cats"></div>
+    <div class="picker-footer">
+      <button class="btn sm" id="picker-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let state = {
+  r: 97, g: 162, b: 242,
+  h: 210, s: 60, v: 95,
+};
+
+let categories = [
+  { id: uid(), name: 'Highlights', colors: [] },
+  { id: uid(), name: 'Base Colors', colors: [] },
+  { id: uid(), name: 'Shadows',    colors: [] },
+];
+
+let pendingAddHex = null; // hex waiting to be added to a category
+
+// ─── DOM refs ─────────────────────────────────────────────────────────────────
+const previewInner   = document.getElementById('color-preview-inner');
+const hexDisplay     = document.getElementById('hex-display');
+const colorNameDisp  = document.getElementById('color-name-display');
+const contrastDisp   = document.getElementById('contrast-display');
+const hexInput       = document.getElementById('hex-input');
+const valuesGrid     = document.getElementById('values-grid');
+const harmonyRow     = document.getElementById('harmony-row');
+const paletteEl      = document.getElementById('palette-categories');
+const addPickerEl    = document.getElementById('add-picker');
+const pickerCatsEl   = document.getElementById('picker-cats');
+const pickerPreview  = document.getElementById('picker-preview-swatch');
+const pickerHexLabel = document.getElementById('picker-hex-label');
+
+const slH = document.getElementById('sl-h');
+const slS = document.getElementById('sl-s');
+const slV = document.getElementById('sl-v');
+const slR = document.getElementById('sl-r');
+const slG = document.getElementById('sl-g');
+const slB = document.getElementById('sl-b');
+const nvH = document.getElementById('nv-h');
+const nvS = document.getElementById('nv-s');
+const nvV = document.getElementById('nv-v');
+const nvR = document.getElementById('nv-r');
+const nvG = document.getElementById('nv-g');
+const nvB = document.getElementById('nv-b');
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function showToast(msg, dur = 1600) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+function copyText(text) {
+  navigator.clipboard?.writeText(text).then(() => showToast(`Copied: ${text}`));
+}
+
+function textColorFor(r, g, b) {
+  return relativeLuminance(r, g, b) > 0.35 ? '#111' : '#fff';
+}
+
+// ─── Sync sliders → state ─────────────────────────────────────────────────────
+function fromHSV(h, s, v) {
+  state.h = clamp(Math.round(h), 0, 360);
+  state.s = clamp(Math.round(s), 0, 100);
+  state.v = clamp(Math.round(v), 0, 100);
+  const rgb = hsvToRgb(state.h, state.s, state.v);
+  state.r = rgb.r; state.g = rgb.g; state.b = rgb.b;
+  render();
+}
+
+function fromRGB(r, g, b) {
+  state.r = clamp(Math.round(r), 0, 255);
+  state.g = clamp(Math.round(g), 0, 255);
+  state.b = clamp(Math.round(b), 0, 255);
+  const hsv = rgbToHsv(state.r, state.g, state.b);
+  state.h = hsv.h; state.s = hsv.s; state.v = hsv.v;
+  render();
+}
+
+// ─── Slider events ────────────────────────────────────────────────────────────
+function bindSlider(slider, numInput, channel) {
+  const onChange = (src) => {
+    const val = parseFloat(src === 'num' ? numInput.value : slider.value);
+    if (isNaN(val)) return;
+    if (['h','s','v'].includes(channel)) {
+      const nh = channel==='h'?val:state.h, ns = channel==='s'?val:state.s, nv = channel==='v'?val:state.v;
+      fromHSV(nh, ns, nv);
+    } else {
+      const nr = channel==='r'?val:state.r, ng = channel==='g'?val:state.g, nb = channel==='b'?val:state.b;
+      fromRGB(nr, ng, nb);
+    }
+  };
+  slider.addEventListener('input', () => onChange('slider'));
+  numInput.addEventListener('change', () => onChange('num'));
+  numInput.addEventListener('keydown', e => { if (e.key==='Enter') onChange('num'); });
+}
+
+bindSlider(slH, nvH, 'h');
+bindSlider(slS, nvS, 's');
+bindSlider(slV, nvV, 'v');
+bindSlider(slR, nvR, 'r');
+bindSlider(slG, nvG, 'g');
+bindSlider(slB, nvB, 'b');
+
+// ─── Hex input ────────────────────────────────────────────────────────────────
+hexInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') parseHexInput();
+});
+hexInput.addEventListener('blur', parseHexInput);
+
+function parseHexInput() {
+  const raw = hexInput.value.trim();
+  if (!raw) return;
+  let hex = raw.startsWith('#') ? raw : '#' + raw;
+  if (/^#[0-9a-fA-F]{3,6}$/.test(hex)) {
+    const rgb = hexToRgb(hex);
+    fromRGB(rgb.r, rgb.g, rgb.b);
+    hexInput.value = '';
+  }
+}
+
+// Click to copy hex
+hexDisplay.addEventListener('click', () => copyText(hexDisplay.textContent));
+
+// ─── Input Panel Tabs ─────────────────────────────────────────────────────────
+document.querySelectorAll('#input-tabs .tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#input-tabs .tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#input-panel .tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelector(`.tab-content[data-tab-content="${btn.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  const { r, g, b, h, s, v } = state;
+  const hex = rgbToHex(r, g, b);
+  const hsl = rgbToHsl(r, g, b);
+  const cmyk = rgbToCmyk(r, g, b);
+  const srgb = rgbToSrgbLinear(r, g, b);
+  const cw = contrastRatio(r, g, b, 255, 255, 255);
+  const cb = contrastRatio(r, g, b, 0, 0, 0);
+  const named = findClosestNamedColor(r, g, b);
+
+  // Preview
+  previewInner.style.background = hex;
+  hexDisplay.textContent = hex;
+  colorNameDisp.textContent = named.distance === 0
+    ? `✓ ${named.name}`
+    : `≈ ${named.name} (Δ${named.distance})`;
+  contrastDisp.textContent = `vs white: ${cw}:1 · vs black: ${cb}:1`;
+
+  // Slider values
+  slH.value = h; nvH.value = h;
+  slS.value = s; nvS.value = s;
+  slV.value = v; nvV.value = v;
+  slR.value = r; nvR.value = r;
+  slG.value = g; nvG.value = g;
+  slB.value = b; nvB.value = b;
+
+  // Slider track backgrounds for S and V (dynamic)
+  const baseHex = rgbToHex(...Object.values(hsvToRgb(h, 100, 100)));
+  const vHex1   = rgbToHex(...Object.values(hsvToRgb(h, s, 0)));
+  const vHex2   = rgbToHex(...Object.values(hsvToRgb(h, s, 100)));
+  slS.style.background = `linear-gradient(to right, ${rgbToHex(...Object.values(hsvToRgb(h,0,v)))}, ${baseHex})`;
+  slV.style.background = `linear-gradient(to right, ${vHex1}, ${vHex2})`;
+
+  // Values grid
+  const blocks = [
+    { label: 'HEX',  value: hex },
+    { label: 'RGB',  value: `${r}, ${g}, ${b}` },
+    { label: 'HSV',  value: `${h}°, ${s}%, ${v}%` },
+    { label: 'HSL',  value: `${hsl.h}°, ${hsl.s}%, ${hsl.l}%` },
+    { label: 'CMYK', value: `${cmyk.c}, ${cmyk.m}, ${cmyk.y}, ${cmyk.k}` },
+    { label: 'sRGB', value: `${srgb.r}, ${srgb.g}, ${srgb.b}` },
+  ];
+
+  valuesGrid.innerHTML = blocks.map(b =>
+    `<div class="val-block" data-copy="${b.value}" title="Click to copy">
+      <div class="val-block-label">${b.label}</div>
+      <div class="val-block-value">${b.value}</div>
+    </div>`
+  ).join('');
+
+  valuesGrid.querySelectorAll('.val-block').forEach(el => {
+    el.addEventListener('click', () => copyText(el.dataset.copy));
+  });
+
+  renderHarmonies(h, s, v);
+  updateSelectedSwatch();
+}
+
+// ─── Harmonies ────────────────────────────────────────────────────────────────
+function renderHarmonies(h, s, v) {
+  const harm = getHarmonies(h, s, v);
+
+  function swatchHTML(color, size='h-swatch') {
+    const hex = color.hex || rgbToHex(color.r, color.g, color.b);
+    return `<div class="${size}" style="background:${hex}" data-hex="${hex}" title="${hex}"></div>`;
+  }
+
+  const groups = [
+    { label: 'Complementary',    colors: harm.complementary },
+    { label: 'Analogous',        colors: harm.analogous },
+    { label: 'Triadic',          colors: harm.triadic },
+    { label: 'Split Comp.',      colors: harm.splitComplementary },
+    { label: 'Tetradic',         colors: harm.tetradic },
+  ];
+
+  harmonyRow.innerHTML = groups.map(g => `
+    <div class="harmony-group">
+      <div class="harmony-group-label">${g.label}</div>
+      <div class="harmony-swatches">
+        ${g.colors.map(c => swatchHTML(c)).join('')}
+      </div>
+    </div>
+  `).join('') + `
+    <div class="harmony-group">
+      <div class="harmony-group-label">Tints</div>
+      <div class="tint-shade-row">
+        ${[...harm.tints].reverse().map(c => `<div class="ts-swatch" style="background:${c.hex}" data-hex="${c.hex}" title="${c.hex}"></div>`).join('')}
+        <div class="ts-swatch" style="background:${rgbToHex(state.r,state.g,state.b)};outline:2px solid var(--accent);outline-offset:1px" data-hex="${rgbToHex(state.r,state.g,state.b)}" title="Base"></div>
+        ${harm.shades.map(c => `<div class="ts-swatch" style="background:${c.hex}" data-hex="${c.hex}" title="${c.hex}"></div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // Click → select OR add
+  harmonyRow.querySelectorAll('[data-hex]').forEach(el => {
+    el.addEventListener('click', () => {
+      const rgb = hexToRgb(el.dataset.hex);
+      fromRGB(rgb.r, rgb.g, rgb.b);
+    });
+    el.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      openAddPicker(el.dataset.hex);
+    });
+    el.title = el.dataset.hex + ' (right-click to add to palette)';
+  });
+}
+
+// ─── Add Color to Palette Flow ────────────────────────────────────────────────
+document.getElementById('add-color-btn').addEventListener('click', () => {
+  openAddPicker(rgbToHex(state.r, state.g, state.b));
+});
+
+document.getElementById('color-preview').addEventListener('click', () => {
+  openAddPicker(rgbToHex(state.r, state.g, state.b));
+});
+
+function openAddPicker(hex) {
+  pendingAddHex = hex;
+  pickerPreview.style.background = hex;
+  pickerHexLabel.textContent = hex;
+  renderPickerCategories();
+  addPickerEl.classList.add('open');
+}
+
+function renderPickerCategories() {
+  pickerCatsEl.innerHTML = categories.length === 0
+    ? '<div style="color:var(--text3);font-size:12px">No categories yet. Add one first.</div>'
+    : categories.map(c => `
+        <button class="picker-cat-btn" data-cat="${c.id}">${c.name}
+          <span style="color:var(--text3);font-size:10px;float:right">${c.colors.length} colors</span>
+        </button>
+      `).join('');
+  pickerCatsEl.querySelectorAll('.picker-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      addColorToCategory(btn.dataset.cat, pendingAddHex);
+      addPickerEl.classList.remove('open');
+      showToast(`Added ${pendingAddHex}`);
+    });
+  });
+}
+
+document.getElementById('picker-cancel').addEventListener('click', () => {
+  addPickerEl.classList.remove('open');
+});
+addPickerEl.addEventListener('click', e => {
+  if (e.target === addPickerEl) addPickerEl.classList.remove('open');
+});
+
+function addColorToCategory(catId, hex) {
+  const cat = categories.find(c => c.id === catId);
+  if (cat) {
+    cat.colors.push({ hex, id: uid() });
+    renderPalette();
+  }
+}
+
+// ─── Palette ──────────────────────────────────────────────────────────────────
+function renderPalette() {
+  paletteEl.innerHTML = categories.map((cat, idx) => `
+    <div class="cat-row ${cat.colors.length === 0 ? 'empty' : ''}" data-cat="${cat.id}" draggable="true">
+      <div class="cat-header">
+        <span class="cat-handle" title="Drag to reorder">⠿</span>
+        <input class="cat-name-input" value="${escHtml(cat.name)}" data-cat="${cat.id}" spellcheck="false">
+        <div class="cat-actions">
+          ${idx > 0 ? `<button class="cat-btn" data-action="up" data-cat="${cat.id}" title="Move up">↑</button>` : ''}
+          ${idx < categories.length-1 ? `<button class="cat-btn" data-action="down" data-cat="${cat.id}" title="Move down">↓</button>` : ''}
+          <button class="cat-btn danger" data-action="del" data-cat="${cat.id}" title="Delete category">✕</button>
+        </div>
+      </div>
+      <div class="cat-swatches">
+        ${cat.colors.map(c => `
+          <div class="cat-swatch" style="background:${c.hex}" data-hex="${c.hex}" data-color="${c.id}" data-cat-id="${cat.id}" title="${c.hex}" tabindex="0">
+            <div class="swatch-remove" data-remove="${c.id}" data-cat="${cat.id}">✕</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="cat-drop-zone">Drop colors here or click + Add above</div>
+    </div>
+  `).join('');
+
+  // Name inputs
+  paletteEl.querySelectorAll('.cat-name-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const cat = categories.find(c => c.id === inp.dataset.cat);
+      if (cat) { cat.name = inp.value; }
+    });
+  });
+
+  // Action buttons
+  paletteEl.querySelectorAll('.cat-btn[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { action, cat: id } = btn.dataset;
+      const idx = categories.findIndex(c => c.id === id);
+      if (action === 'up' && idx > 0)
+        [categories[idx-1], categories[idx]] = [categories[idx], categories[idx-1]];
+      else if (action === 'down' && idx < categories.length-1)
+        [categories[idx], categories[idx+1]] = [categories[idx+1], categories[idx]];
+      else if (action === 'del') {
+        if (confirm(`Delete "${categories[idx].name}"?`)) categories.splice(idx, 1);
+      }
+      renderPalette();
+    });
+  });
+
+  // Click swatch → select + load color
+  paletteEl.querySelectorAll('.cat-swatch').forEach(sw => {
+    sw.addEventListener('click', e => {
+      if (e.target.classList.contains('swatch-remove')) return;
+      selectSwatch('palette', { catId: sw.dataset.catId, colorId: sw.dataset.color });
+      const rgb = hexToRgb(sw.dataset.hex);
+      fromRGB(rgb.r, rgb.g, rgb.b);
+    });
+  });
+
+  // Remove swatch
+  paletteEl.querySelectorAll('.swatch-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const cat = categories.find(c => c.id === btn.dataset.cat);
+      if (cat) {
+        cat.colors = cat.colors.filter(c => c.id !== btn.dataset.remove);
+        renderPalette();
+      }
+    });
+  });
+
+  // Drag-to-reorder rows
+  initDrag();
+  reapplySelectionHighlight();
+}
+
+// ─── Drag & Drop (category rows) ─────────────────────────────────────────────
+let dragSrc = null;
+
+function initDrag() {
+  paletteEl.querySelectorAll('.cat-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      dragSrc = row.dataset.cat;
+      row.style.opacity = '0.5';
+    });
+    row.addEventListener('dragend', () => { row.style.opacity = ''; dragSrc = null; });
+    row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('drag-over'); });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      if (!dragSrc || dragSrc === row.dataset.cat) return;
+      const fromIdx = categories.findIndex(c => c.id === dragSrc);
+      const toIdx   = categories.findIndex(c => c.id === row.dataset.cat);
+      const [moved] = categories.splice(fromIdx, 1);
+      categories.splice(toIdx, 0, moved);
+      renderPalette();
+    });
+  });
+}
+
+// ─── Add Category ─────────────────────────────────────────────────────────────
+document.getElementById('add-cat-btn').addEventListener('click', () => {
+  categories.push({ id: uid(), name: 'New Category', colors: [] });
+  renderPalette();
+  // Focus the new name input
+  const inputs = paletteEl.querySelectorAll('.cat-name-input');
+  if (inputs.length) { const last = inputs[inputs.length-1]; last.focus(); last.select(); }
+});
+
+// ─── Export / Import ─────────────────────────────────────────────────────────
+document.getElementById('export-btn').addEventListener('click', () => {
+  const data = JSON.stringify({ categories }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'chroma-palette.json';
+  a.click();
+  showToast('Palette exported!');
+});
+
+document.getElementById('import-btn').addEventListener('click', () => {
+  document.getElementById('import-file').click();
+});
+document.getElementById('import-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (data.categories) {
+        categories = data.categories;
+        renderPalette();
+        showToast('Palette imported!');
+      }
+    } catch { showToast('Invalid palette file.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// ─── Utility ─────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── Random Generator ─────────────────────────────────────────────────────────
+
+const rngResults     = document.getElementById('rng-results');
+const rngCountEl     = document.getElementById('rng-count');
+const rngHarmSel     = document.getElementById('rng-harmony');
+const rngAddAllBtn   = document.getElementById('rng-add-all-btn');
+const rngZonesUI     = document.getElementById('rng-zones-ui');
+const rngZonesList   = document.getElementById('rng-zones-list');
+const rngAnchorSwatch= document.getElementById('rng-anchor-swatch');
+const rngAnchorToggle= document.getElementById('rng-anchor-toggle');
+
+let generatedColors = [];
+let anchorEnabled   = true;
+
+// ── Hue Zones ────────────────────────────────────────────────────────────────
+let hueZones = [];
+
+function zoneGradientCSS(hue, variation) {
+  const steps = 12, lo = hue - variation, hi = hue + variation, stops = [];
+  for (let i = 0; i <= steps; i++) {
+    const h = ((lo + (i / steps) * (hi - lo)) % 360 + 360) % 360;
+    const rgb = hsvToRgb(h, 80, 90);
+    stops.push(`rgb(${rgb.r},${rgb.g},${rgb.b})`);
+  }
+  return `linear-gradient(to right, ${stops.join(',')})`;
+}
+
+function renderZones() {
+  if (hueZones.length === 0) {
+    rngZonesList.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:4px 0">No zones yet — add one to constrain hues.</div>';
+    return;
+  }
+  rngZonesList.innerHTML = hueZones.map(z => {
+    const sel = selectedSwatch && selectedSwatch.type === 'zone' && selectedSwatch.zoneId === z.id;
+    return `<div class="zone-card" data-zone="${z.id}">
+      <div class="zone-gradient${sel ? ' swatch-selected' : ''}" style="background:${zoneGradientCSS(z.hue, z.variation)}"
+           data-zone-grad="${z.id}" title="Click to link left panel to this zone hue"></div>
+      <div class="zone-controls">
+        <div class="zone-row">
+          <span class="zone-lbl">Hue</span>
+          <input type="range" class="zone-slider" data-field="hue" data-zone="${z.id}" min="0" max="360" value="${z.hue}">
+          <span class="zone-val">${z.hue}°</span>
+        </div>
+        <div class="zone-row">
+          <span class="zone-lbl">±Var</span>
+          <input type="range" class="zone-slider" data-field="variation" data-zone="${z.id}" min="1" max="90" value="${z.variation}">
+          <span class="zone-val">±${z.variation}°</span>
+        </div>
+      </div>
+      <button class="zone-remove-btn" data-zone="${z.id}" title="Remove zone">✕</button>
+    </div>`;
+  }).join('');
+
+  rngZonesList.querySelectorAll('.zone-slider').forEach(sl => {
+    sl.addEventListener('input', () => {
+      const z = hueZones.find(z => z.id === sl.dataset.zone);
+      if (!z) return;
+      z[sl.dataset.field] = parseInt(sl.value);
+      const card = rngZonesList.querySelector(`.zone-card[data-zone="${z.id}"]`);
+      card.querySelector('.zone-gradient').style.background = zoneGradientCSS(z.hue, z.variation);
+      sl.closest('.zone-row').querySelector('.zone-val').textContent =
+        sl.dataset.field === 'hue' ? `${z.hue}°` : `±${z.variation}°`;
+      if (sl.dataset.field === 'hue') fromHSV(z.hue, state.s, state.v);
+    });
+  });
+
+  rngZonesList.querySelectorAll('[data-zone-grad]').forEach(el => {
+    el.addEventListener('click', () => {
+      const z = hueZones.find(z => z.id === el.dataset.zoneGrad);
+      if (!z) return;
+      selectSwatch('zone', { zoneId: z.id });
+      fromHSV(z.hue, state.s, state.v);
+    });
+  });
+
+  rngZonesList.querySelectorAll('.zone-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (selectedSwatch && selectedSwatch.type === 'zone' && selectedSwatch.zoneId === btn.dataset.zone)
+        clearSelection();
+      hueZones = hueZones.filter(z => z.id !== btn.dataset.zone);
+      renderZones();
+    });
+  });
+}
+
+rngHarmSel.addEventListener('change', () => {
+  rngZonesUI.style.display = rngHarmSel.value === 'hueZones' ? '' : 'none';
+});
+document.getElementById('rng-add-zone-btn').addEventListener('click', () => {
+  hueZones.push({ id: uid(), hue: Math.round(Math.random() * 360), variation: 20 });
+  renderZones();
+});
+
+rngAnchorToggle.addEventListener('click', () => {
+  anchorEnabled = !anchorEnabled;
+  rngAnchorToggle.textContent = anchorEnabled ? '🔗 Linked' : '⛓ Free';
+  rngAnchorToggle.classList.toggle('active', anchorEnabled);
+  document.getElementById('rng-anchor-area').style.opacity = anchorEnabled ? '1' : '0.45';
+});
+
+// ── Selection tracking ────────────────────────────────────────────────────────
+// selectedSwatch: null | { type:'generated', idx }
+//                         { type:'palette', catId, colorId }
+//                         { type:'zone', zoneId }
+let selectedSwatch = null;
+
+function selectSwatch(type, data) {
+  document.querySelectorAll('.swatch-selected').forEach(el => el.classList.remove('swatch-selected'));
+  selectedSwatch = Object.assign({ type }, data);
+  reapplySelectionHighlight();
+}
+function clearSelection() {
+  document.querySelectorAll('.swatch-selected').forEach(el => el.classList.remove('swatch-selected'));
+  selectedSwatch = null;
+}
+function reapplySelectionHighlight() {
+  if (!selectedSwatch) return;
+  let el = null;
+  if (selectedSwatch.type === 'generated')
+    el = rngResults.querySelector(`[data-idx="${selectedSwatch.idx}"]`);
+  else if (selectedSwatch.type === 'palette')
+    el = paletteEl.querySelector(`[data-color="${selectedSwatch.colorId}"]`);
+  else if (selectedSwatch.type === 'zone')
+    el = rngZonesList.querySelector(`[data-zone-grad="${selectedSwatch.zoneId}"]`);
+  if (el) el.classList.add('swatch-selected');
+}
+
+// Called from render() — surgically updates selected swatch without full re-render
+function updateSelectedSwatch() {
+  rngAnchorSwatch.style.background = rgbToHex(state.r, state.g, state.b);
+  if (!selectedSwatch) return;
+  const hex = rgbToHex(state.r, state.g, state.b);
+
+  if (selectedSwatch.type === 'generated') {
+    const c = generatedColors[selectedSwatch.idx];
+    if (!c || c.locked) return;
+    Object.assign(c, { r: state.r, g: state.g, b: state.b, h: state.h, s: state.s, v: state.v, hex });
+    const sw = rngResults.querySelector(`[data-idx="${selectedSwatch.idx}"]`);
+    if (sw) { sw.style.background = hex; sw.dataset.hex = hex; }
+
+  } else if (selectedSwatch.type === 'palette') {
+    const cat = categories.find(c => c.id === selectedSwatch.catId);
+    const color = cat && cat.colors.find(c => c.id === selectedSwatch.colorId);
+    if (!color) return;
+    color.hex = hex;
+    const sw = paletteEl.querySelector(`[data-color="${selectedSwatch.colorId}"]`);
+    if (sw) { sw.style.background = hex; sw.dataset.hex = hex; }
+
+  } else if (selectedSwatch.type === 'zone') {
+    const zone = hueZones.find(z => z.id === selectedSwatch.zoneId);
+    if (!zone) return;
+    zone.hue = state.h;
+    const card = rngZonesList.querySelector(`.zone-card[data-zone="${zone.id}"]`);
+    if (card) {
+      card.querySelector('.zone-gradient').style.background = zoneGradientCSS(zone.hue, zone.variation);
+      const sl = card.querySelector('[data-field="hue"]');
+      if (sl) sl.value = zone.hue;
+      card.querySelectorAll('.zone-val')[0].textContent = `${zone.hue}°`;
+    }
+  }
+}
+
+// ── Generation logic ──────────────────────────────────────────────────────────
+function randInRange(min, max) { return min + Math.random() * (max - min); }
+
+function pickHue() {
+  if (rngHarmSel.value === 'hueZones') {
+    if (hueZones.length === 0) return Math.random() * 360;
+    const z = hueZones[Math.floor(Math.random() * hueZones.length)];
+    return ((z.hue + randInRange(-z.variation, z.variation)) + 360) % 360;
+  }
+  return Math.random() * 360;
+}
+
+function harmonyHues(baseHue, mode) {
+  switch (mode) {
+    case 'analogous':          return [baseHue, (baseHue+30)%360, (baseHue+330)%360];
+    case 'complementary':      return [baseHue, (baseHue+180)%360];
+    case 'triadic':            return [baseHue, (baseHue+120)%360, (baseHue+240)%360];
+    case 'splitComplementary': return [baseHue, (baseHue+150)%360, (baseHue+210)%360];
+    case 'tetradic':           return [baseHue, (baseHue+90)%360, (baseHue+180)%360, (baseHue+270)%360];
+    default:                   return [baseHue];
+  }
+}
+
+function makeColor(h, s, v) {
+  const rgb = hsvToRgb(h, s, v);
+  return { h: Math.round(h), s: Math.round(s), v: Math.round(v),
+    r: rgb.r, g: rgb.g, b: rgb.b, hex: rgbToHex(rgb.r, rgb.g, rgb.b), locked: false };
+}
+
+function generateFreshColors(n, harmony) {
+  if (n <= 0) return [];
+  const mode = harmony === 'hueZones' ? 'none' : harmony;
+
+  // ANCHORED + harmony: key off active color with exact harmonic intervals
+  if (anchorEnabled && mode !== 'none') {
+    const hues = harmonyHues(state.h, mode);
+    return Array.from({ length: n }, (_, i) =>
+      makeColor(hues[i % hues.length], randInRange(35, 92), randInRange(40, 95)));
+  }
+
+  if (mode === 'none') {
+    return Array.from({ length: n }, () =>
+      makeColor(pickHue(), randInRange(35, 95), randInRange(40, 95)));
+  }
+
+  const pool = [];
+  let attempts = 0;
+  while (pool.length < n && attempts < 200) {
+    attempts++;
+    harmonyHues(pickHue(), mode).forEach(h => {
+      if (pool.length < n) pool.push(makeColor(h, randInRange(40, 90), randInRange(45, 92)));
+    });
+  }
+  return pool.slice(0, n);
+}
+
+function generateColors() {
+  const requested = Math.max(1, Math.min(32, parseInt(rngCountEl.value) || 5));
+  const lockedCount = generatedColors.filter(c => c.locked).length;
+  const count = Math.max(requested, lockedCount);
+  if (count !== requested) { rngCountEl.value = count; showToast(`Count raised to ${count} to fit locked colors`); }
+
+  const slots = Array.from({ length: count }, (_, i) => {
+    const e = generatedColors[i]; return e && e.locked ? e : null;
+  });
+  const fresh = generateFreshColors(slots.filter(s => !s).length, rngHarmSel.value);
+  let fi = 0;
+  generatedColors = slots.map(s => s ? s : fresh[fi++]);
+  renderGeneratedColors();
+  rngAddAllBtn.style.display = generatedColors.length ? '' : 'none';
+}
+
+function renderGeneratedColors() {
+  if (generatedColors.length === 0) {
+    rngResults.innerHTML = '<div class="rng-empty">Click Generate to create colors</div>';
+    return;
+  }
+  rngResults.innerHTML = generatedColors.map((c, i) => `
+    <div class="rng-swatch ${c.locked ? 'locked' : ''}" style="background:${c.hex}"
+         data-hex="${c.hex}" data-idx="${i}" title="${c.hex}">
+      <div class="rng-lock-btn" data-lock-idx="${i}">${c.locked ? '🔒' : '🔓'}</div>
+    </div>
+  `).join('');
+
+  rngResults.querySelectorAll('.rng-swatch').forEach(sw => {
+    sw.addEventListener('click', e => {
+      if (e.target.classList.contains('rng-lock-btn')) return;
+      selectSwatch('generated', { idx: parseInt(sw.dataset.idx) });
+      const rgb = hexToRgb(sw.dataset.hex);
+      fromRGB(rgb.r, rgb.g, rgb.b);
+    });
+    sw.addEventListener('contextmenu', e => { e.preventDefault(); openAddPicker(sw.dataset.hex); });
+  });
+
+  rngResults.querySelectorAll('.rng-lock-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.lockIdx);
+      generatedColors[idx].locked = !generatedColors[idx].locked;
+      if (selectedSwatch && selectedSwatch.type === 'generated' && selectedSwatch.idx === idx && generatedColors[idx].locked)
+        clearSelection();
+      renderGeneratedColors();
+    });
+  });
+  reapplySelectionHighlight();
+}
+
+document.getElementById('rng-generate-btn').addEventListener('click', generateColors);
+rngAddAllBtn.addEventListener('click', () => openAddPickerMulti(generatedColors.map(c => c.hex)));
+
+
+// Multi-add: open picker once, add all selected hexes to chosen category
+function openAddPickerMulti(hexes) {
+  if (!hexes.length) return;
+  pendingAddHex = hexes[0]; // reuse single for preview
+  pickerPreview.style.background = `linear-gradient(to right, ${hexes.slice(0,5).join(',')})`;
+  pickerHexLabel.textContent = `${hexes.length} colors`;
+  renderPickerCategoriesMulti(hexes);
+  addPickerEl.classList.add('open');
+}
+
+function renderPickerCategoriesMulti(hexes) {
+  pickerCatsEl.innerHTML = categories.length === 0
+    ? '<div style="color:var(--text3);font-size:12px">No categories yet.</div>'
+    : categories.map(c => `
+        <button class="picker-cat-btn" data-cat="${c.id}">${c.name}
+          <span style="color:var(--text3);font-size:10px;float:right">${c.colors.length} colors</span>
+        </button>
+      `).join('');
+  pickerCatsEl.querySelectorAll('.picker-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      hexes.forEach(hex => addColorToCategory(btn.dataset.cat, hex));
+      addPickerEl.classList.remove('open');
+      showToast(`Added ${hexes.length} colors`);
+    });
+  });
+}
+
+// ResizeObserver to keep canvas sharp
+new ResizeObserver(resizeCanvas).observe(rngCanvas);
+
+// Init legend
+renderHotspotLegend();
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+render();
+renderPalette();
+</script>
+</body>
+</html>
