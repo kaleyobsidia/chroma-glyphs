@@ -14,7 +14,7 @@
 
   <!-- Top Bar -->
   <div id="topbar">
-    <h1>CHROMA <span>/ Color Palette Studio</span></h1>
+    <h1>CHROMA GLYPHS<span>/ Color Palette Studio</span></h1>
     <div class="topbar-actions">
       <button class="btn sm" id="export-btn">⬇ Export JSON</button>
       <button class="btn sm" id="import-btn">⬆ Import JSON</button>
@@ -40,7 +40,7 @@
           </div>
         </div>
         <div id="hex-input-row">
-          <input id="hex-input" type="text" placeholder="#HEX or color name" spellcheck="false">
+          <input id="hex-input" type="text" placeholder="#HEX color tag" spellcheck="false">
           <button class="btn sm primary" id="add-color-btn">+ Add</button>
         </div>
       </div>
@@ -50,8 +50,8 @@
         <div class="tabs" id="input-tabs">
           <button class="tab active" data-tab="sliders">Sliders</button>
           <button class="tab" data-tab="wheel">Wheel</button>
-          <button class="tab" data-tab="info">Info</button>
           <button class="tab" data-tab="harmonies">Harmonies</button>
+          <button class="tab" data-tab="info">Info</button>
         </div>
       </div>
 
@@ -209,9 +209,7 @@ let state = {
 };
 
 let categories = [
-  { id: uid(), name: 'Highlights', colors: [] },
-  { id: uid(), name: 'Base Colors', colors: [] },
-  { id: uid(), name: 'Shadows',    colors: [] },
+  { id: uid(), name: 'Default', colors: [] }
 ];
 
 let pendingAddHex = null; // hex waiting to be added to a category
@@ -242,6 +240,8 @@ const nvV = document.getElementById('nv-v');
 const nvR = document.getElementById('nv-r');
 const nvG = document.getElementById('nv-g');
 const nvB = document.getElementById('nv-b');
+
+previewInner.style.background = "#FFFFFF";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -813,6 +813,7 @@ const rngAnchorToggle= document.getElementById('rng-anchor-toggle');
 
 let generatedColors = [];
 let anchorEnabled   = true;
+toggleRNGAnchor();
 
 // ── Hue Zones ────────────────────────────────────────────────────────────────
 let hueZones = [];
@@ -894,11 +895,20 @@ document.getElementById('rng-add-zone-btn').addEventListener('click', () => {
 });
 
 rngAnchorToggle.addEventListener('click', () => {
+  if(!anchorEnabled && !selectedSwatch) { return; }
   anchorEnabled = !anchorEnabled;
   rngAnchorToggle.textContent = anchorEnabled ? '🔗 Linked' : '⛓ Free';
   rngAnchorToggle.classList.toggle('active', anchorEnabled);
   document.getElementById('rng-anchor-area').style.opacity = anchorEnabled ? '1' : '0.45';
 });
+
+function toggleRNGAnchor() {
+  if(!anchorEnabled && !selectedSwatch) { return; }
+  anchorEnabled = !anchorEnabled;
+  rngAnchorToggle.textContent = anchorEnabled ? '🔗 Linked' : '⛓ Free';
+  rngAnchorToggle.classList.toggle('active', anchorEnabled);
+  document.getElementById('rng-anchor-area').style.opacity = anchorEnabled ? '1' : '0.45';
+}
 
 // ── Selection tracking ────────────────────────────────────────────────────────
 // selectedSwatch: null | { type:'generated', idx }
