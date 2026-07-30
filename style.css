@@ -805,3 +805,60 @@ input[type=range]::-webkit-slider-thumb:hover {
   white-space: nowrap;
 }
 .filter-del { font-size: 11px; padding: 1px 4px; }
+
+.focused-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--focused-min-w), 1fr));
+  gap: 6px;
+  height: 100%;
+}
+.focused-swatch { border-radius: 6px; }
+
+/* ─── Floating Toolbar ────────────────────────────────────────────────────── */
+.floating-toolbar {
+  position: fixed;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+  z-index: 500;
+  transition: border-radius 0.15s, padding 0.15s;
+}
+.floating-toolbar.dragging { cursor: grabbing; }
+.floating-toolbar.collapsed {
+  padding: 4px;
+  border-radius: 50%;
+}
+
+.floating-toolbar .toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.10);
+  color: #1b1d1f;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+.floating-toolbar .toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(1.06);
+}
+.floating-toolbar.collapsed .toolbar-btn {
+  border-radius: 50%;
+}

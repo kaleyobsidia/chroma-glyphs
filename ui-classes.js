@@ -215,3 +215,195 @@ class Palette {
     });
   }
 }
+
+// ─── FocusedSwatch ────────────────────────────────────────────────────────────
+class FocusedSwatch {
+  /**
+   * A stripped-down swatch for fullscreen/focused display — just shows
+   * color, nothing else. No draggable, no lock/remove buttons.
+   */
+  constructor(hex, opts = {}) {
+    this.id  = opts.id ?? uid();
+    this.hex = hex;
+  }
+
+  /** Build a FocusedSwatch from a regular Swatch, optionally with its
+   *  filtered display hex (pass in cat.getDisplayHex(swatch) for that). */
+  static fromSwatch(swatch, displayHex) {
+    return new FocusedSwatch(displayHex ?? swatch.hex, { id: swatch.id });
+  }
+
+  renderHTML(catId) {
+    return `
+      <div class="focused-swatch" style="background:${this.hex}"
+           data-hex="${this.hex}" data-cat-id="${catId}" data-color="${this.id}"
+           title="${this.hex}"></div>`;
+  }
+}
+
+// ─── FocusedPalette ───────────────────────────────────────────────────────────
+class FocusedPalette {
+  /** Constant minimum swatch width (px) before a new row starts. */
+  static MIN_SWATCH_WIDTH = 120;
+
+  /**
+   * Wraps an existing Palette for fullscreen display inside #palette-section.
+   * Renders header-free — just a responsive grid of FocusedSwatch tiles that
+   * fills the container, as large as possible, wrapping once tiles would
+   * drop below minSwatchWidth.
+   */
+  constructor(palette, opts = {}) {
+    this.palette         = palette; // the underlying Palette instance
+    this.minSwatchWidth  = opts.minSwatchWidth ?? FocusedPalette.MIN_SWATCH_WIDTH;
+  }
+
+  get id()   { return this.palette.id; }
+  get name() { return this.palette.name; }
+
+  /** FocusedSwatch instances built from the source palette's current colors + filters */
+  buildSwatches() {
+    return this.palette.colors.map(c =>
+      FocusedSwatch.fromSwatch(c, this.palette.getDisplayHex(c)));
+  }
+
+  renderSwatchesHTML() {
+    return this.buildSwatches().map(fs => fs.renderHTML(this.palette.id)).join('');
+  }
+
+  /**
+   * @param {string} toolbarHTML optional markup (e.g. an "exit fullscreen"
+   *   button) rendered above the swatch grid — pass '' for none.
+   */
+  renderHTML(toolbarHTML = '') {
+    return `
+      <div class="focused-palette" data-cat="${this.palette.id}"
+           style="--focused-min-w:${this.minSwatchWidth}px">
+        ${toolbarHTML}
+        <div class="focused-swatches">${this.renderSwatchesHTML()}</div>
+      </div>`;
+  }
+}
+
+// ─── FloatingToolbar ──────────────────────────────────────────────────────────
+class FloatingToolbar {
+  /**
+   * A draggable, semi-transparent floating toolbar. Mounts itself directly
+   * to the DOM (document.body by default) — no markup needed in index.html.
+   *
+   * Buttons are plain data: { id, icon, label, onClick, visible }.
+   * `icon` is the button's rendered content (emoji or short text/HTML),
+   * `label` becomes its title/tooltip. Visibility is per-button so callers
+   * can show/hide buttons based on context (e.g. only show "Delete" when
+   * something is selected) without touching layout code.
+   *
+   * The leftmost button is always the built-in expand/collapse toggle.
+   * Collapsed → only that button renders. Expanded → all *visible* buttons
+   * render, and the toolbar grows to fit them.
+   *
+   * Dragging: pointerdown anywhere on the toolbar that isn't a .toolbar-btn
+   * starts a drag; pointer position is tracked with the Pointer Events API
+   * (consistent with the rest of the app), and the toolbar's fixed x/y is
+   * updated live.
+   */
+  constructor(opts = {}) {
+    this.id        = opts.id ?? uid();
+    this.buttons   = [];
+    this.collapsed = opts.collapsed ?? false;
+    this.x         = opts.x ?? 20;
+    this.y         = opts.y ?? 20;
+    this._drag     = null;
+
+    this.el = document.createElement('div');
+    this.el.className = 'floating-toolbar';
+    this.el.style.left = `${this.x}px`;
+    this.el.style.top  = `${this.y}px`;
+
+    this._attachDragHandlers();
+    this.mount(opts.parent);
+    this.render();
+  }
+
+  mount(parent = document.body) {
+    parent.appendChild(this.el);
+    return this;
+  }
+  remove() { this.el.remove(); }
+
+  // ── Button management ─────────────────────────────────────────────────
+  addButton({ id, icon, label, onClick, visible = true } = {}) {
+    const btn = { id: id ?? uid(), icon, label, onClick, visible };
+    this.buttons.push(btn);
+    this.render();
+    return btn;
+  }
+  removeButton(id) {
+    this.buttons = this.buttons.filter(b => b.id !== id);
+    this.render();
+  }
+  findButton(id) { return this.buttons.find(b => b.id === id); }
+
+  setButtonVisible(id, visible) {
+    const b = this.findButton(id);
+    if (b) { b.visible = visible; this.render(); }
+  }
+
+  /** Batch-update visibility, e.g. setContext({ 'delete': hasSelection, 'export': true }) */
+  setContext(visibilityById) {
+    for (const [id, visible] of Object.entries(visibilityById)) {
+      const b = this.findButton(id);
+      if (b) b.visible = visible;
+    }
+    this.render();
+  }
+
+  // ── Collapse / expand ───────────────────────────────────────────────────
+  toggleCollapse() {
+    this.collapsed = !this.collapsed;
+    this.render();
+  }
+
+  // ── Drag (Pointer Events) ───────────────────────────────────────────────
+  _attachDragHandlers() {
+    this.el.addEventListener('pointerdown', e => {
+      if (e.target.closest('.toolbar-btn')) return; // buttons don't drag
+      this._drag = { startX: e.clientX, startY: e.clientY, origX: this.x, origY: this.y };
+      this.el.setPointerCapture(e.pointerId);
+      this.el.classList.add('dragging');
+    });
+    this.el.addEventListener('pointermove', e => {
+      if (!this._drag) return;
+      this.x = this._drag.origX + (e.clientX - this._drag.startX);
+      this.y = this._drag.origY + (e.clientY - this._drag.startY);
+      this.el.style.left = `${this.x}px`;
+      this.el.style.top  = `${this.y}px`;
+    });
+    const endDrag = () => { this._drag = null; this.el.classList.remove('dragging'); };
+    this.el.addEventListener('pointerup', endDrag);
+    this.el.addEventListener('pointercancel', endDrag);
+  }
+
+  // ── Render (rebuild content + reattach listeners, same pattern as renderPalette) ──
+  render() {
+    const visible = this.buttons.filter(b => b.visible);
+
+    const expandBtnHTML = `
+      <button class="toolbar-btn toolbar-expand-btn" data-tb-toggle
+              title="${this.collapsed ? 'Expand' : 'Collapse'}">${this.collapsed ? '▸' : '◂'}</button>`;
+
+    const otherButtonsHTML = this.collapsed ? '' : visible.map(b => `
+      <button class="toolbar-btn" data-tb-btn="${b.id}" title="${b.label ?? ''}">${b.icon ?? b.label ?? '•'}</button>
+    `).join('');
+
+    this.el.classList.toggle('collapsed', this.collapsed);
+    this.el.innerHTML = expandBtnHTML + otherButtonsHTML;
+
+    this.el.querySelector('[data-tb-toggle]').addEventListener('click', () => this.toggleCollapse());
+
+    if (!this.collapsed) {
+      visible.forEach(b => {
+        const btnEl = this.el.querySelector(`[data-tb-btn="${b.id}"]`);
+        if (btnEl && b.onClick) btnEl.addEventListener('click', b.onClick);
+      });
+    }
+  }
+}
