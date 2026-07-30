@@ -8,13 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="color.js"></script>
+<script src="ui-classes.js"></script>
 </head>
 <body>
 <div id="app">
 
   <!-- Top Bar -->
   <div id="topbar">
-    <h1>CHROMA GLYPHS<span>/ Color Palette Studio</span></h1>
+    <h1>CHROMA <span>/ Color Palette Studio</span></h1>
     <div class="topbar-actions">
       <button class="btn sm" id="export-btn">⬇ Export JSON</button>
       <button class="btn sm" id="import-btn">⬆ Import JSON</button>
@@ -40,7 +41,7 @@
           </div>
         </div>
         <div id="hex-input-row">
-          <input id="hex-input" type="text" placeholder="#HEX color tag" spellcheck="false">
+          <input id="hex-input" type="text" placeholder="#HEX or color name" spellcheck="false">
           <button class="btn sm primary" id="add-color-btn">+ Add</button>
         </div>
       </div>
@@ -50,8 +51,8 @@
         <div class="tabs" id="input-tabs">
           <button class="tab active" data-tab="sliders">Sliders</button>
           <button class="tab" data-tab="wheel">Wheel</button>
-          <button class="tab" data-tab="harmonies">Harmonies</button>
           <button class="tab" data-tab="info">Info</button>
+          <button class="tab" data-tab="harmonies">Harmonies</button>
         </div>
       </div>
 
@@ -121,10 +122,10 @@
     <!-- ─── Right: Random Generator + Palette ─── -->
     <div id="right-panel">
 
-      <!-- Random Generator Panel -->
+      <!-- Generator Controls Panel -->
       <div id="rng-panel">
         <div id="rng-top-row">
-          <span class="section-label">Random Generator</span>
+          <span class="section-label">Generator</span>
           <div class="rng-control">
             <label>Count</label>
             <input type="number" class="rng-count-input" id="rng-count" min="1" max="32" value="5">
@@ -141,8 +142,12 @@
               <option value="hueZones">Hue Zones</option>
             </select>
           </div>
-          <button class="btn sm primary" id="rng-generate-btn">⟳ Generate</button>
-          <button class="btn sm" id="rng-add-all-btn" style="display:none">+ All to Palette</button>
+          <div class="rng-control" id="rng-anchor-area" style="opacity:1">
+            <label>Anchor</label>
+            <div id="rng-anchor-swatch"></div>
+            <button id="rng-anchor-toggle" class="btn sm active">🔗 Linked</button>
+          </div>
+          <button class="btn sm primary" id="rng-generate-btn" style="margin-left:auto">⟳ Generate</button>
         </div>
 
         <!-- Hue Zones UI — only visible in hueZones mode -->
@@ -153,29 +158,16 @@
           </div>
           <div id="rng-zones-list"><!-- zone cards rendered by JS --></div>
         </div>
-
-        <!-- Anchor + Results -->
-        <div id="rng-output-row">
-          <div id="rng-anchor-area">
-            <div id="rng-anchor-swatch" title="Active color — seed for generation"></div>
-            <div id="rng-anchor-label">Seed</div>
-            <button id="rng-anchor-toggle" class="btn sm active">🔗 Linked</button>
-          </div>
-          <div id="rng-anchor-divider"></div>
-          <div id="rng-results">
-            <div class="rng-empty">Click Generate to create colors</div>
-          </div>
-        </div>
       </div>
 
-      <!-- Palette Section -->
+      <!-- Palettes Section -->
       <div id="palette-section">
         <div id="palette-header">
-          <h2>Palette</h2>
-          <button class="btn sm" id="add-cat-btn">+ Category</button>
+          <h2>Palettes</h2>
+          <button class="btn sm" id="add-cat-btn">+ New Palette</button>
         </div>
         <div id="palette-categories">
-          <!-- Populated by JS -->
+          <!-- Populated by JS — generated palette is always first -->
         </div>
       </div>
 
@@ -201,18 +193,16 @@
 <div id="toast"></div>
 
 <script>
-
 // ─── State ────────────────────────────────────────────────────────────────────
-let state = {
-  r: 97, g: 162, b: 242,
-  h: 210, s: 60, v: 95,
-};
+let state = { r: 97, g: 162, b: 242, h: 210, s: 60, v: 95 };
 
+// categories[0] is always the generated palette (isGenerated: true)
 let categories = [
-  { id: uid(), name: 'Default', colors: [] }
+  new Palette('Generated', { isGenerated: true }),
+  new Palette('Default',   { isGenerated: false })
 ];
 
-let pendingAddHex = null; // hex waiting to be added to a category
+let pendingAddHex = null;
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 const previewInner   = document.getElementById('color-preview-inner');
@@ -241,29 +231,29 @@ const nvR = document.getElementById('nv-r');
 const nvG = document.getElementById('nv-g');
 const nvB = document.getElementById('nv-b');
 
-previewInner.style.background = "#FFFFFF";
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function uid() { return Math.random().toString(36).slice(2, 9); }
-
+// uid() now lives in ui-classes.js (shared with Swatch/Palette)
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function showToast(msg, dur = 1600) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), dur);
 }
-
 function copyText(text) {
   navigator.clipboard?.writeText(text).then(() => showToast(`Copied: ${text}`));
 }
-
 function textColorFor(r, g, b) {
   return relativeLuminance(r, g, b) > 0.35 ? '#111' : '#fff';
 }
 
-// ─── Sync sliders → state ─────────────────────────────────────────────────────
+// Filter application now lives on the Palette class (Palette.applyFilters /
+// cat.getDisplayHex) — see ui-classes.js.
+
+// ─── Color state setters ──────────────────────────────────────────────────────
 function fromHSV(h, s, v) {
   state.h = clamp(Math.round(h), 0, 360);
   state.s = clamp(Math.round(s), 0, 100);
@@ -272,7 +262,6 @@ function fromHSV(h, s, v) {
   state.r = rgb.r; state.g = rgb.g; state.b = rgb.b;
   render();
 }
-
 function fromRGB(r, g, b) {
   state.r = clamp(Math.round(r), 0, 255);
   state.g = clamp(Math.round(g), 0, 255);
@@ -282,24 +271,21 @@ function fromRGB(r, g, b) {
   render();
 }
 
-// ─── Slider events ────────────────────────────────────────────────────────────
+// ─── Sliders ──────────────────────────────────────────────────────────────────
 function bindSlider(slider, numInput, channel) {
   const onChange = (src) => {
     const val = parseFloat(src === 'num' ? numInput.value : slider.value);
     if (isNaN(val)) return;
     if (['h','s','v'].includes(channel)) {
-      const nh = channel==='h'?val:state.h, ns = channel==='s'?val:state.s, nv = channel==='v'?val:state.v;
-      fromHSV(nh, ns, nv);
+      fromHSV(channel==='h'?val:state.h, channel==='s'?val:state.s, channel==='v'?val:state.v);
     } else {
-      const nr = channel==='r'?val:state.r, ng = channel==='g'?val:state.g, nb = channel==='b'?val:state.b;
-      fromRGB(nr, ng, nb);
+      fromRGB(channel==='r'?val:state.r, channel==='g'?val:state.g, channel==='b'?val:state.b);
     }
   };
   slider.addEventListener('input', () => onChange('slider'));
   numInput.addEventListener('change', () => onChange('num'));
   numInput.addEventListener('keydown', e => { if (e.key==='Enter') onChange('num'); });
 }
-
 bindSlider(slH, nvH, 'h');
 bindSlider(slS, nvS, 's');
 bindSlider(slV, nvV, 'v');
@@ -308,11 +294,8 @@ bindSlider(slG, nvG, 'g');
 bindSlider(slB, nvB, 'b');
 
 // ─── Hex input ────────────────────────────────────────────────────────────────
-hexInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') parseHexInput();
-});
+hexInput.addEventListener('keydown', e => { if (e.key === 'Enter') parseHexInput(); });
 hexInput.addEventListener('blur', parseHexInput);
-
 function parseHexInput() {
   const raw = hexInput.value.trim();
   if (!raw) return;
@@ -323,8 +306,6 @@ function parseHexInput() {
     hexInput.value = '';
   }
 }
-
-// Click to copy hex
 hexDisplay.addEventListener('click', () => copyText(hexDisplay.textContent));
 
 // ─── Input Panel Tabs ─────────────────────────────────────────────────────────
@@ -342,22 +323,18 @@ document.querySelectorAll('#input-tabs .tab').forEach(btn => {
 function render() {
   const { r, g, b, h, s, v } = state;
   const hex = rgbToHex(r, g, b);
-  const hsl = rgbToHsl(r, g, b);
+  const hsl  = rgbToHsl(r, g, b);
   const cmyk = rgbToCmyk(r, g, b);
   const srgb = rgbToSrgbLinear(r, g, b);
   const cw = contrastRatio(r, g, b, 255, 255, 255);
   const cb = contrastRatio(r, g, b, 0, 0, 0);
   const named = findClosestNamedColor(r, g, b);
 
-  // Preview
   previewInner.style.background = hex;
   hexDisplay.textContent = hex;
-  colorNameDisp.textContent = named.distance === 0
-    ? `✓ ${named.name}`
-    : `≈ ${named.name} (Δ${named.distance})`;
+  colorNameDisp.textContent = named.distance === 0 ? `✓ ${named.name}` : `≈ ${named.name} (Δ${named.distance})`;
   contrastDisp.textContent = `vs white: ${cw}:1 · vs black: ${cb}:1`;
 
-  // Slider values
   slH.value = h; nvH.value = h;
   slS.value = s; nvS.value = s;
   slV.value = v; nvV.value = v;
@@ -365,14 +342,9 @@ function render() {
   slG.value = g; nvG.value = g;
   slB.value = b; nvB.value = b;
 
-  // Slider track backgrounds for S and V (dynamic)
-  const baseHex = rgbToHex(...Object.values(hsvToRgb(h, 100, 100)));
-  const vHex1   = rgbToHex(...Object.values(hsvToRgb(h, s, 0)));
-  const vHex2   = rgbToHex(...Object.values(hsvToRgb(h, s, 100)));
-  slS.style.background = `linear-gradient(to right, ${rgbToHex(...Object.values(hsvToRgb(h,0,v)))}, ${baseHex})`;
-  slV.style.background = `linear-gradient(to right, ${vHex1}, ${vHex2})`;
+  slS.style.background = `linear-gradient(to right, ${rgbToHex(...Object.values(hsvToRgb(h,0,v)))}, ${rgbToHex(...Object.values(hsvToRgb(h,100,100)))})`;
+  slV.style.background = `linear-gradient(to right, ${rgbToHex(...Object.values(hsvToRgb(h,s,0)))}, ${rgbToHex(...Object.values(hsvToRgb(h,s,100)))})`;
 
-  // Values grid
   const blocks = [
     { label: 'HEX',  value: hex },
     { label: 'RGB',  value: `${r}, ${g}, ${b}` },
@@ -381,14 +353,12 @@ function render() {
     { label: 'CMYK', value: `${cmyk.c}, ${cmyk.m}, ${cmyk.y}, ${cmyk.k}` },
     { label: 'sRGB', value: `${srgb.r}, ${srgb.g}, ${srgb.b}` },
   ];
-
   valuesGrid.innerHTML = blocks.map(b =>
     `<div class="val-block" data-copy="${b.value}" title="Click to copy">
       <div class="val-block-label">${b.label}</div>
       <div class="val-block-value">${b.value}</div>
     </div>`
   ).join('');
-
   valuesGrid.querySelectorAll('.val-block').forEach(el => {
     el.addEventListener('click', () => copyText(el.dataset.copy));
   });
@@ -398,16 +368,50 @@ function render() {
   updateSelectedSwatch();
 }
 
-// ─── Color Wheel ──────────────────────────────────────────────────────────────
+// ─── Harmonies ────────────────────────────────────────────────────────────────
+function renderHarmonies(h, s, v) {
+  const harm = getHarmonies(h, s, v);
+  function swatchHTML(color) {
+    const hex = color.hex || rgbToHex(color.r, color.g, color.b);
+    return `<div class="h-swatch" style="background:${hex}" data-hex="${hex}" title="${hex}"></div>`;
+  }
+  const groups = [
+    { label: 'Complementary',  colors: harm.complementary },
+    { label: 'Analogous',      colors: harm.analogous },
+    { label: 'Triadic',        colors: harm.triadic },
+    { label: 'Split Comp.',    colors: harm.splitComplementary },
+    { label: 'Tetradic',       colors: harm.tetradic },
+  ];
+  harmonyRow.innerHTML = groups.map(g => `
+    <div class="harmony-group">
+      <div class="harmony-group-label">${g.label}</div>
+      <div class="harmony-swatches">${g.colors.map(c => swatchHTML(c)).join('')}</div>
+    </div>
+  `).join('') + `
+    <div class="harmony-group">
+      <div class="harmony-group-label">Tints &amp; Shades</div>
+      <div class="tint-shade-row">
+        ${[...harm.tints].reverse().map(c => `<div class="ts-swatch" style="background:${c.hex}" data-hex="${c.hex}"></div>`).join('')}
+        <div class="ts-swatch" style="background:${rgbToHex(state.r,state.g,state.b)};outline:2px solid var(--accent);outline-offset:1px" data-hex="${rgbToHex(state.r,state.g,state.b)}"></div>
+        ${harm.shades.map(c => `<div class="ts-swatch" style="background:${c.hex}" data-hex="${c.hex}"></div>`).join('')}
+      </div>
+    </div>
+  `;
+  harmonyRow.querySelectorAll('[data-hex]').forEach(el => {
+    el.addEventListener('click', () => { const rgb = hexToRgb(el.dataset.hex); fromRGB(rgb.r, rgb.g, rgb.b); });
+    el.addEventListener('contextmenu', e => { e.preventDefault(); openAddPicker(el.dataset.hex); });
+  });
+}
 
+// ─── Color Wheel ──────────────────────────────────────────────────────────────
 const wheelCanvas = document.getElementById('color-wheel');
 const wheelCtx    = wheelCanvas.getContext('2d');
-let   wheelDrag   = null; // null | 'hue' | 'sv'
+let   wheelDrag   = null;
 
 function wheelDims() {
   const W = wheelCanvas.offsetWidth;
-  const cx = W / 2, cy = W / 2;
-  const outerR = W / 2 - 3;
+  const cx = W/2, cy = W/2;
+  const outerR = W/2 - 3;
   const innerR = outerR * 0.74;
   const sqHalf = (innerR / Math.sqrt(2)) * 0.93;
   return { W, cx, cy, outerR, innerR, sqHalf };
@@ -416,18 +420,15 @@ function wheelDims() {
 function drawWheel() {
   const W = wheelCanvas.offsetWidth;
   if (!W) return;
-
   const dpr = window.devicePixelRatio || 1;
   if (wheelCanvas.width !== W * dpr || wheelCanvas.height !== W * dpr) {
-    wheelCanvas.width  = W * dpr;
+    wheelCanvas.width = W * dpr;
     wheelCanvas.height = W * dpr;
   }
   wheelCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   wheelCtx.clearRect(0, 0, W, W);
-
   const { cx, cy, outerR, innerR, sqHalf } = wheelDims();
 
-  // ── Hue ring: 360 wedge segments ──────────────────────────────────────────
   for (let i = 0; i < 360; i++) {
     const a1 = ((i - 0.5) / 360) * Math.PI * 2 - Math.PI / 2;
     const a2 = ((i + 0.5) / 360) * Math.PI * 2 - Math.PI / 2;
@@ -439,177 +440,77 @@ function drawWheel() {
     wheelCtx.fillStyle = `rgb(${r},${g},${b})`;
     wheelCtx.fill();
   }
-
-  // Punch out inner circle to create the ring
   wheelCtx.beginPath();
   wheelCtx.arc(cx, cy, innerR, 0, Math.PI * 2);
   wheelCtx.fillStyle = '#191b1d';
   wheelCtx.fill();
 
-  // ── SV square ─────────────────────────────────────────────────────────────
   const sqX = cx - sqHalf, sqY = cy - sqHalf, sqSize = sqHalf * 2;
   const { r: hr, g: hg, b: hb } = hsvToRgb(state.h, 100, 100);
-
-  // Saturation: left=white → right=pure hue
   const satGrad = wheelCtx.createLinearGradient(sqX, 0, sqX + sqSize, 0);
   satGrad.addColorStop(0, '#ffffff');
   satGrad.addColorStop(1, `rgb(${hr},${hg},${hb})`);
   wheelCtx.fillStyle = satGrad;
   wheelCtx.fillRect(sqX, sqY, sqSize, sqSize);
-
-  // Value/brightness: top=transparent → bottom=black
   const valGrad = wheelCtx.createLinearGradient(0, sqY, 0, sqY + sqSize);
   valGrad.addColorStop(0, 'rgba(0,0,0,0)');
   valGrad.addColorStop(1, 'rgba(0,0,0,1)');
   wheelCtx.fillStyle = valGrad;
   wheelCtx.fillRect(sqX, sqY, sqSize, sqSize);
-
-  // Subtle border around the square
   wheelCtx.strokeStyle = 'rgba(255,255,255,0.12)';
   wheelCtx.lineWidth = 1;
   wheelCtx.strokeRect(sqX, sqY, sqSize, sqSize);
 
-  // ── Hue ring handle ────────────────────────────────────────────────────────
   const hueAngle = (state.h / 360) * Math.PI * 2 - Math.PI / 2;
   const hRingR   = (outerR + innerR) / 2;
-  const hx = cx + Math.cos(hueAngle) * hRingR;
-  const hy = cy + Math.sin(hueAngle) * hRingR;
+  const hx = cx + Math.cos(hueAngle) * hRingR, hy = cy + Math.sin(hueAngle) * hRingR;
+  wheelCtx.beginPath(); wheelCtx.arc(hx, hy, 9, 0, Math.PI*2); wheelCtx.strokeStyle='rgba(0,0,0,0.5)'; wheelCtx.lineWidth=3; wheelCtx.stroke();
+  wheelCtx.beginPath(); wheelCtx.arc(hx, hy, 9, 0, Math.PI*2); wheelCtx.strokeStyle='#fff'; wheelCtx.lineWidth=2; wheelCtx.stroke();
+  wheelCtx.beginPath(); wheelCtx.arc(hx, hy, 6, 0, Math.PI*2); wheelCtx.fillStyle=`rgb(${hr},${hg},${hb})`; wheelCtx.fill();
 
-  wheelCtx.beginPath();
-  wheelCtx.arc(hx, hy, 9, 0, Math.PI * 2);
-  wheelCtx.strokeStyle = 'rgba(0,0,0,0.5)';
-  wheelCtx.lineWidth = 3;
-  wheelCtx.stroke();
-  wheelCtx.beginPath();
-  wheelCtx.arc(hx, hy, 9, 0, Math.PI * 2);
-  wheelCtx.strokeStyle = '#fff';
-  wheelCtx.lineWidth = 2;
-  wheelCtx.stroke();
-  wheelCtx.beginPath();
-  wheelCtx.arc(hx, hy, 6, 0, Math.PI * 2);
-  wheelCtx.fillStyle = `rgb(${hr},${hg},${hb})`;
-  wheelCtx.fill();
-
-  // ── SV handle ─────────────────────────────────────────────────────────────
-  const svX = sqX + (state.s / 100) * sqSize;
-  const svY = sqY + (1 - state.v / 100) * sqSize;
-
-  wheelCtx.beginPath();
-  wheelCtx.arc(svX, svY, 8, 0, Math.PI * 2);
-  wheelCtx.strokeStyle = 'rgba(0,0,0,0.5)';
-  wheelCtx.lineWidth = 3;
-  wheelCtx.stroke();
-  wheelCtx.beginPath();
-  wheelCtx.arc(svX, svY, 8, 0, Math.PI * 2);
-  wheelCtx.strokeStyle = '#fff';
-  wheelCtx.lineWidth = 2;
-  wheelCtx.stroke();
-  wheelCtx.beginPath();
-  wheelCtx.arc(svX, svY, 5, 0, Math.PI * 2);
-  wheelCtx.fillStyle = rgbToHex(state.r, state.g, state.b);
-  wheelCtx.fill();
+  const svX = sqX + (state.s/100)*sqSize, svY = sqY + (1 - state.v/100)*sqSize;
+  wheelCtx.beginPath(); wheelCtx.arc(svX, svY, 8, 0, Math.PI*2); wheelCtx.strokeStyle='rgba(0,0,0,0.5)'; wheelCtx.lineWidth=3; wheelCtx.stroke();
+  wheelCtx.beginPath(); wheelCtx.arc(svX, svY, 8, 0, Math.PI*2); wheelCtx.strokeStyle='#fff'; wheelCtx.lineWidth=2; wheelCtx.stroke();
+  wheelCtx.beginPath(); wheelCtx.arc(svX, svY, 5, 0, Math.PI*2); wheelCtx.fillStyle=rgbToHex(state.r, state.g, state.b); wheelCtx.fill();
 }
 
-// ── Wheel interaction ──────────────────────────────────────────────────────
 wheelCanvas.addEventListener('pointerdown', e => {
   const rect = wheelCanvas.getBoundingClientRect();
-  const scaleX = wheelCanvas.offsetWidth / rect.width;
-  const x = (e.clientX - rect.left) * scaleX;
-  const y = (e.clientY - rect.top)  * scaleX;
+  const sc = wheelCanvas.offsetWidth / rect.width;
+  const x = (e.clientX - rect.left)*sc, y = (e.clientY - rect.top)*sc;
   const { cx, cy, outerR, innerR, sqHalf } = wheelDims();
-  const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-
+  const dist = Math.sqrt((x-cx)**2 + (y-cy)**2);
   if (dist >= innerR && dist <= outerR) {
-    wheelDrag = 'hue';
-    wheelCanvas.setPointerCapture(e.pointerId);
+    wheelDrag = 'hue'; wheelCanvas.setPointerCapture(e.pointerId);
     applyWheelHue(x, y, cx, cy);
-  } else if (x >= cx - sqHalf && x <= cx + sqHalf && y >= cy - sqHalf && y <= cy + sqHalf) {
-    wheelDrag = 'sv';
-    wheelCanvas.setPointerCapture(e.pointerId);
-    applyWheelSV(x, y, cx - sqHalf, cy - sqHalf, sqHalf * 2);
+  } else if (x >= cx-sqHalf && x <= cx+sqHalf && y >= cy-sqHalf && y <= cy+sqHalf) {
+    wheelDrag = 'sv'; wheelCanvas.setPointerCapture(e.pointerId);
+    applyWheelSV(x, y, cx-sqHalf, cy-sqHalf, sqHalf*2);
   }
 });
-
 wheelCanvas.addEventListener('pointermove', e => {
   if (!wheelDrag) return;
   const rect = wheelCanvas.getBoundingClientRect();
-  const scaleX = wheelCanvas.offsetWidth / rect.width;
-  const x = (e.clientX - rect.left) * scaleX;
-  const y = (e.clientY - rect.top)  * scaleX;
+  const sc = wheelCanvas.offsetWidth / rect.width;
+  const x = (e.clientX - rect.left)*sc, y = (e.clientY - rect.top)*sc;
   const { cx, cy, sqHalf } = wheelDims();
   if (wheelDrag === 'hue') applyWheelHue(x, y, cx, cy);
-  else                     applyWheelSV(x, y, cx - sqHalf, cy - sqHalf, sqHalf * 2);
+  else applyWheelSV(x, y, cx-sqHalf, cy-sqHalf, sqHalf*2);
 });
-
 wheelCanvas.addEventListener('pointerup',     () => { wheelDrag = null; });
 wheelCanvas.addEventListener('pointercancel', () => { wheelDrag = null; });
-
 function applyWheelHue(x, y, cx, cy) {
-  const angle = Math.atan2(y - cy, x - cx);
-  const hue   = ((angle + Math.PI / 2) / (Math.PI * 2) * 360 + 360) % 360;
-  fromHSV(hue, state.s, state.v);
+  const angle = Math.atan2(y-cy, x-cx);
+  fromHSV(((angle + Math.PI/2) / (Math.PI*2) * 360 + 360) % 360, state.s, state.v);
 }
-
 function applyWheelSV(x, y, sqX, sqY, sqSize) {
-  const s = clamp((x - sqX) / sqSize * 100, 0, 100);
-  const v = clamp((1 - (y - sqY) / sqSize) * 100, 0, 100);
-  fromHSV(state.h, s, v);
-}
-
-// ─── Harmonies ────────────────────────────────────────────────────────────────
-function renderHarmonies(h, s, v) {
-  const harm = getHarmonies(h, s, v);
-
-  function swatchHTML(color, size='h-swatch') {
-    const hex = color.hex || rgbToHex(color.r, color.g, color.b);
-    return `<div class="${size}" style="background:${hex}" data-hex="${hex}" title="${hex}"></div>`;
-  }
-
-  const groups = [
-    { label: 'Complementary',    colors: harm.complementary },
-    { label: 'Analogous',        colors: harm.analogous },
-    { label: 'Triadic',          colors: harm.triadic },
-    { label: 'Split Comp.',      colors: harm.splitComplementary },
-    { label: 'Tetradic',         colors: harm.tetradic },
-  ];
-
-  harmonyRow.innerHTML = groups.map(g => `
-    <div class="harmony-group">
-      <div class="harmony-group-label">${g.label}</div>
-      <div class="harmony-swatches">
-        ${g.colors.map(c => swatchHTML(c)).join('')}
-      </div>
-    </div>
-  `).join('') + `
-    <div class="harmony-group">
-      <div class="harmony-group-label">Tints</div>
-      <div class="tint-shade-row">
-        ${[...harm.tints].reverse().map(c => `<div class="ts-swatch" style="background:${c.hex}" data-hex="${c.hex}" title="${c.hex}"></div>`).join('')}
-        <div class="ts-swatch" style="background:${rgbToHex(state.r,state.g,state.b)};outline:2px solid var(--accent);outline-offset:1px" data-hex="${rgbToHex(state.r,state.g,state.b)}" title="Base"></div>
-        ${harm.shades.map(c => `<div class="ts-swatch" style="background:${c.hex}" data-hex="${c.hex}" title="${c.hex}"></div>`).join('')}
-      </div>
-    </div>
-  `;
-
-  // Click → select OR add
-  harmonyRow.querySelectorAll('[data-hex]').forEach(el => {
-    el.addEventListener('click', () => {
-      const rgb = hexToRgb(el.dataset.hex);
-      fromRGB(rgb.r, rgb.g, rgb.b);
-    });
-    el.addEventListener('contextmenu', e => {
-      e.preventDefault();
-      openAddPicker(el.dataset.hex);
-    });
-    el.title = el.dataset.hex + ' (right-click to add to palette)';
-  });
+  fromHSV(state.h, clamp((x-sqX)/sqSize*100, 0, 100), clamp((1-(y-sqY)/sqSize)*100, 0, 100));
 }
 
 // ─── Add Color to Palette Flow ────────────────────────────────────────────────
 document.getElementById('add-color-btn').addEventListener('click', () => {
   openAddPicker(rgbToHex(state.r, state.g, state.b));
 });
-
 document.getElementById('color-preview').addEventListener('click', () => {
   openAddPicker(rgbToHex(state.r, state.g, state.b));
 });
@@ -623,10 +524,12 @@ function openAddPicker(hex) {
 }
 
 function renderPickerCategories() {
-  pickerCatsEl.innerHTML = categories.length === 0
-    ? '<div style="color:var(--text3);font-size:12px">No categories yet. Add one first.</div>'
-    : categories.map(c => `
-        <button class="picker-cat-btn" data-cat="${c.id}">${c.name}
+  // Only show user palettes (not the generated one) as targets
+  const userCats = categories.filter(c => !c.isGenerated);
+  pickerCatsEl.innerHTML = userCats.length === 0
+    ? '<div style="color:var(--text3);font-size:12px">No palettes yet. Add one below.</div>'
+    : userCats.map(c => `
+        <button class="picker-cat-btn" data-cat="${c.id}">${escHtml(c.name)}
           <span style="color:var(--text3);font-size:10px;float:right">${c.colors.length} colors</span>
         </button>
       `).join('');
@@ -639,107 +542,287 @@ function renderPickerCategories() {
   });
 }
 
-document.getElementById('picker-cancel').addEventListener('click', () => {
-  addPickerEl.classList.remove('open');
-});
-addPickerEl.addEventListener('click', e => {
-  if (e.target === addPickerEl) addPickerEl.classList.remove('open');
-});
+document.getElementById('picker-cancel').addEventListener('click', () => addPickerEl.classList.remove('open'));
+addPickerEl.addEventListener('click', e => { if (e.target === addPickerEl) addPickerEl.classList.remove('open'); });
 
 function addColorToCategory(catId, hex) {
   const cat = categories.find(c => c.id === catId);
   if (cat) {
-    cat.colors.push({ hex, id: uid() });
+    cat.addColor(hex);
     renderPalette();
   }
 }
 
+// ─── Save as New ──────────────────────────────────────────────────────────────
+function saveAsNew(catId) {
+  const cat = categories.find(c => c.id === catId);
+  if (!cat) return;
+  const newName = cat.isGenerated ? 'Generated Copy' : `Copy of ${cat.name}`;
+  const newCat = cat.clone(newName); // bakes filters into fresh Swatches
+  categories.push(newCat);
+  renderPalette();
+  showToast(`Saved as "${newCat.name}"`);
+}
+
 // ─── Palette ──────────────────────────────────────────────────────────────────
 function renderPalette() {
-  paletteEl.innerHTML = categories.map((cat, idx) => `
-    <div class="cat-row ${cat.colors.length === 0 ? 'empty' : ''}" data-cat="${cat.id}" draggable="true">
+  const userCats = categories.filter(c => !c.isGenerated);
+
+  paletteEl.innerHTML = categories.map((cat, idx) => {
+    const userIdx = userCats.indexOf(cat);
+    const isFirstUser = userIdx === 0;
+    const isLastUser  = userIdx === userCats.length - 1;
+
+    // ── Header ───────────────────────────────────────────────────────────────
+    const header = cat.isGenerated ? `
+      <div class="cat-header generated-header">
+        <span class="cat-label">Generated</span>
+        <div class="cat-actions">
+          <button class="cat-btn" data-save-new="${cat.id}" title="Save colors as new palette">Save as New</button>
+        </div>
+      </div>
+    ` : `
       <div class="cat-header">
         <span class="cat-handle" title="Drag to reorder">⠿</span>
         <input class="cat-name-input" value="${escHtml(cat.name)}" data-cat="${cat.id}" spellcheck="false">
         <div class="cat-actions">
-          ${idx > 0 ? `<button class="cat-btn" data-action="up" data-cat="${cat.id}" title="Move up">↑</button>` : ''}
-          ${idx < categories.length-1 ? `<button class="cat-btn" data-action="down" data-cat="${cat.id}" title="Move down">↓</button>` : ''}
-          <button class="cat-btn danger" data-action="del" data-cat="${cat.id}" title="Delete category">✕</button>
+          ${!isFirstUser ? `<button class="cat-btn" data-action="up" data-cat="${cat.id}" title="Move up">↑</button>` : ''}
+          ${!isLastUser  ? `<button class="cat-btn" data-action="down" data-cat="${cat.id}" title="Move down">↓</button>` : ''}
+          <button class="cat-btn danger" data-action="del" data-cat="${cat.id}" title="Delete palette">✕</button>
+          <button class="cat-btn" data-save-new="${cat.id}" title="Duplicate palette">Dupe</button>
         </div>
       </div>
-      <div class="cat-swatches">
-        ${cat.colors.map(c => `
-          <div class="cat-swatch" style="background:${c.hex}" data-hex="${c.hex}" data-color="${c.id}" data-cat-id="${cat.id}" title="${c.hex}" tabindex="0">
-            <div class="swatch-remove" data-remove="${c.id}" data-cat="${cat.id}">✕</div>
-          </div>
-        `).join('')}
-      </div>
-      <div class="cat-drop-zone">Drop colors here or click + Add above</div>
-    </div>
-  `).join('');
+    `;
 
-  // Name inputs
+    // Swatches + filter chain markup are owned by the Palette/Swatch classes
+    return cat.renderRowHTML(header);
+  }).join('');
+
+  // Note: the anchor toggle and Generate button now live in the static
+  // #rng-panel markup (not regenerated here), so they're wired up once —
+  // see the "Anchor / Generate" listeners near the Random Generator section.
+
+  // ── Name inputs ───────────────────────────────────────────────────────────
   paletteEl.querySelectorAll('.cat-name-input').forEach(inp => {
     inp.addEventListener('change', () => {
       const cat = categories.find(c => c.id === inp.dataset.cat);
-      if (cat) { cat.name = inp.value; }
+      if (cat) cat.name = inp.value;
     });
   });
 
-  // Action buttons
+  // ── Action buttons (up/down/del) ──────────────────────────────────────────
   paletteEl.querySelectorAll('.cat-btn[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
       const { action, cat: id } = btn.dataset;
       const idx = categories.findIndex(c => c.id === id);
-      if (action === 'up' && idx > 0)
-        [categories[idx-1], categories[idx]] = [categories[idx], categories[idx-1]];
-      else if (action === 'down' && idx < categories.length-1)
-        [categories[idx], categories[idx+1]] = [categories[idx+1], categories[idx]];
-      else if (action === 'del') {
-        if (confirm(`Delete "${categories[idx].name}"?`)) categories.splice(idx, 1);
+      const userIndices = categories.map((c,i) => c.isGenerated ? null : i).filter(i => i !== null);
+      if (action === 'up') {
+        const pos = userIndices.indexOf(idx);
+        if (pos > 0) [categories[userIndices[pos-1]], categories[idx]] = [categories[idx], categories[userIndices[pos-1]]];
+      } else if (action === 'down') {
+        const pos = userIndices.indexOf(idx);
+        if (pos < userIndices.length-1) [categories[idx], categories[userIndices[pos+1]]] = [categories[userIndices[pos+1]], categories[idx]];
+      } else if (action === 'del') {
+        if (confirm(`Delete "${categories[idx].name}"?`)) {
+          if (selectedSwatch?.catId === id) clearSelection();
+          categories.splice(idx, 1);
+        }
       }
       renderPalette();
     });
   });
 
-  // Click swatch → select + load color
-  paletteEl.querySelectorAll('.cat-swatch').forEach(sw => {
-    sw.addEventListener('click', e => {
-      if (e.target.classList.contains('swatch-remove')) return;
-      selectSwatch('palette', { catId: sw.dataset.catId, colorId: sw.dataset.color });
-      const rgb = hexToRgb(sw.dataset.hex);
-      fromRGB(rgb.r, rgb.g, rgb.b);
-    });
+  // ── Save as New ───────────────────────────────────────────────────────────
+  paletteEl.querySelectorAll('[data-save-new]').forEach(btn => {
+    btn.addEventListener('click', () => saveAsNew(btn.dataset.saveNew));
   });
 
-  // Remove swatch
+  // ── Swatch: click to select + load ────────────────────────────────────────
+  paletteEl.querySelectorAll('.cat-swatch').forEach(sw => {
+    sw.addEventListener('click', e => {
+      if (e.target.classList.contains('swatch-remove') ||
+          e.target.classList.contains('swatch-lock')) return;
+      selectSwatch('palette', { catId: sw.dataset.catId, colorId: sw.dataset.color });
+      const rgb = hexToRgb(sw.dataset.hex); // load SOURCE color
+      fromRGB(rgb.r, rgb.g, rgb.b);
+    });
+    sw.addEventListener('contextmenu', e => { e.preventDefault(); openAddPicker(sw.dataset.hex); });
+  });
+
+  // ── Swatch: remove ────────────────────────────────────────────────────────
   paletteEl.querySelectorAll('.swatch-remove').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const cat = categories.find(c => c.id === btn.dataset.cat);
-      if (cat) {
-        cat.colors = cat.colors.filter(c => c.id !== btn.dataset.remove);
-        renderPalette();
+      if (!cat) return;
+      if (selectedSwatch?.colorId === btn.dataset.remove) clearSelection();
+      cat.removeColor(btn.dataset.remove);
+      renderPalette();
+    });
+  });
+
+  // ── Swatch: lock toggle ───────────────────────────────────────────────────
+  paletteEl.querySelectorAll('.swatch-lock').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const cat = categories.find(c => c.id === btn.dataset.lockCat);
+      const color = cat?.findColor(btn.dataset.lockColor);
+      if (!color) return;
+      cat.toggleLock(color.id);
+      if (selectedSwatch?.colorId === color.id && color.locked) clearSelection();
+      const sw = paletteEl.querySelector(`[data-color="${color.id}"]`);
+      if (sw) { sw.classList.toggle('locked', color.locked); btn.textContent = color.locked ? '🔒' : '🔓'; }
+    });
+  });
+
+  // ── Swatch: drag to reorder within row ───────────────────────────────────
+  let palSwDragSrc = null;
+  paletteEl.querySelectorAll('.cat-swatch').forEach(sw => {
+    sw.addEventListener('dragstart', e => {
+      e.stopPropagation();
+      palSwDragSrc = { catId: sw.dataset.catId, colorId: sw.dataset.color };
+      sw.style.opacity = '0.4';
+    });
+    sw.addEventListener('dragend', () => {
+      sw.style.opacity = '';
+      palSwDragSrc = null;
+      paletteEl.querySelectorAll('.cat-swatch').forEach(s => s.classList.remove('swatch-drag-over'));
+    });
+    sw.addEventListener('dragover', e => {
+      e.preventDefault(); e.stopPropagation();
+      if (!palSwDragSrc || palSwDragSrc.colorId === sw.dataset.color) return;
+      paletteEl.querySelectorAll('.cat-swatch').forEach(s => s.classList.remove('swatch-drag-over'));
+      sw.classList.add('swatch-drag-over');
+    });
+    sw.addEventListener('dragleave', () => sw.classList.remove('swatch-drag-over'));
+    sw.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation();
+      sw.classList.remove('swatch-drag-over');
+      if (!palSwDragSrc || palSwDragSrc.colorId === sw.dataset.color ||
+          palSwDragSrc.catId !== sw.dataset.catId) return;
+      const cat = categories.find(c => c.id === palSwDragSrc.catId);
+      if (!cat) return;
+      cat.moveColor(palSwDragSrc.colorId, sw.dataset.color);
+      renderPalette();
+    });
+  });
+
+  // ── Filter: add ──────────────────────────────────────────────────────────
+  paletteEl.querySelectorAll('.filter-add-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = categories.find(c => c.id === btn.dataset.fadd);
+      if (!cat) return;
+      cat.addFilter();
+      renderPalette();
+    });
+  });
+
+  // ── Filter: toggle enable ─────────────────────────────────────────────────
+  paletteEl.querySelectorAll('.filter-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = categories.find(c => c.id === btn.dataset.fcat);
+      const f = cat?.findFilter(btn.dataset.ftoggle);
+      if (!f) return;
+      f.enabled = !f.enabled;
+      refreshSwatchDisplay(cat);
+      const row = btn.closest('.filter-row');
+      if (row) {
+        row.classList.toggle('filter-disabled', !f.enabled);
+        btn.textContent = f.enabled ? '●' : '○';
+        btn.title = f.enabled ? 'Disable' : 'Enable';
       }
     });
   });
 
-  // Drag-to-reorder rows
+  // ── Filter: type change ───────────────────────────────────────────────────
+  paletteEl.querySelectorAll('.filter-type-sel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const cat = categories.find(c => c.id === sel.dataset.fcat);
+      const f = cat?.findFilter(sel.dataset.ftype);
+      if (!f) return;
+      f.type = sel.value;
+      refreshSwatchDisplay(cat);
+    });
+  });
+
+  // ── Filter: amount slider ─────────────────────────────────────────────────
+  paletteEl.querySelectorAll('.filter-amount').forEach(sl => {
+    sl.addEventListener('input', () => {
+      const cat = categories.find(c => c.id === sl.dataset.fcat);
+      const f = cat?.findFilter(sl.dataset.famount);
+      if (!f) return;
+      f.amount = parseInt(sl.value);
+      const valSpan = sl.closest('.filter-row')?.querySelector('.filter-val');
+      if (valSpan) valSpan.textContent = `${f.amount > 0 ? '+' : ''}${Math.round(f.amount)}`;
+      refreshSwatchDisplay(cat);
+    });
+  });
+
+  // ── Filter: delete ────────────────────────────────────────────────────────
+  paletteEl.querySelectorAll('.filter-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cat = categories.find(c => c.id === btn.dataset.fcat);
+      if (!cat) return;
+      cat.removeFilter(btn.dataset.fdel);
+      refreshSwatchDisplay(cat);
+      renderPalette();
+    });
+  });
+
+  // ── Filter: drag to reorder ───────────────────────────────────────────────
+  let filterDragSrc = null;
+  paletteEl.querySelectorAll('.filter-row').forEach(row => {
+    row.addEventListener('dragstart', e => {
+      e.stopPropagation();
+      filterDragSrc = { catId: row.dataset.fcat, filterId: row.dataset.filterId };
+      row.style.opacity = '0.4';
+    });
+    row.addEventListener('dragend', () => {
+      row.style.opacity = '';
+      filterDragSrc = null;
+      paletteEl.querySelectorAll('.filter-row').forEach(r => r.classList.remove('filter-drag-over'));
+    });
+    row.addEventListener('dragover', e => {
+      e.preventDefault(); e.stopPropagation();
+      if (!filterDragSrc || filterDragSrc.filterId === row.dataset.filterId) return;
+      paletteEl.querySelectorAll('.filter-row').forEach(r => r.classList.remove('filter-drag-over'));
+      row.classList.add('filter-drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('filter-drag-over'));
+    row.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation();
+      row.classList.remove('filter-drag-over');
+      if (!filterDragSrc || filterDragSrc.catId !== row.dataset.fcat || filterDragSrc.filterId === row.dataset.filterId) return;
+      const cat = categories.find(c => c.id === filterDragSrc.catId);
+      if (!cat) return;
+      cat.moveFilter(filterDragSrc.filterId, row.dataset.filterId);
+      renderPalette();
+    });
+  });
+
+  // ── Category rows: drag to reorder (user palettes only) ──────────────────
   initDrag();
   reapplySelectionHighlight();
 }
 
+// Refresh swatch display colors without full re-render (for filter live preview)
+function refreshSwatchDisplay(cat) {
+  paletteEl.querySelectorAll(`[data-cat-id="${cat.id}"].cat-swatch`).forEach(sw => {
+    const color = cat.findColor(sw.dataset.color);
+    if (!color) return;
+    const disp = cat.getDisplayHex(color);
+    sw.style.background = disp;
+    sw.title = disp;
+  });
+}
+
 // ─── Drag & Drop (category rows) ─────────────────────────────────────────────
 let dragSrc = null;
-
 function initDrag() {
-  paletteEl.querySelectorAll('.cat-row').forEach(row => {
-    row.addEventListener('dragstart', e => {
-      dragSrc = row.dataset.cat;
-      row.style.opacity = '0.5';
-    });
-    row.addEventListener('dragend', () => { row.style.opacity = ''; dragSrc = null; });
-    row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('drag-over'); });
+  paletteEl.querySelectorAll('.cat-row:not(.generated-cat)').forEach(row => {
+    row.addEventListener('dragstart', e => { dragSrc = row.dataset.cat; row.style.opacity = '0.5'; });
+    row.addEventListener('dragend',   () => { row.style.opacity = ''; dragSrc = null; });
+    row.addEventListener('dragover',  e => { e.preventDefault(); row.classList.add('drag-over'); });
     row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
     row.addEventListener('drop', e => {
       e.preventDefault();
@@ -747,6 +830,7 @@ function initDrag() {
       if (!dragSrc || dragSrc === row.dataset.cat) return;
       const fromIdx = categories.findIndex(c => c.id === dragSrc);
       const toIdx   = categories.findIndex(c => c.id === row.dataset.cat);
+      if (categories[fromIdx].isGenerated || categories[toIdx].isGenerated) return;
       const [moved] = categories.splice(fromIdx, 1);
       categories.splice(toIdx, 0, moved);
       renderPalette();
@@ -754,11 +838,10 @@ function initDrag() {
   });
 }
 
-// ─── Add Category ─────────────────────────────────────────────────────────────
+// ─── Add Palette ──────────────────────────────────────────────────────────────
 document.getElementById('add-cat-btn').addEventListener('click', () => {
-  categories.push({ id: uid(), name: 'New Category', colors: [] });
+  categories.push(new Palette('New Palette'));
   renderPalette();
-  // Focus the new name input
   const inputs = paletteEl.querySelectorAll('.cat-name-input');
   if (inputs.length) { const last = inputs[inputs.length-1]; last.focus(); last.select(); }
 });
@@ -769,14 +852,11 @@ document.getElementById('export-btn').addEventListener('click', () => {
   const blob = new Blob([data], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'chroma-palette.json';
+  a.download = 'chroma-glyphs-palette.json';
   a.click();
   showToast('Palette exported!');
 });
-
-document.getElementById('import-btn').addEventListener('click', () => {
-  document.getElementById('import-file').click();
-});
+document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
 document.getElementById('import-file').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -785,7 +865,12 @@ document.getElementById('import-file').addEventListener('change', e => {
     try {
       const data = JSON.parse(ev.target.result);
       if (data.categories) {
-        categories = data.categories;
+        categories = data.categories.map(Palette.fromJSON);
+        // Ensure generated category exists as first
+        if (!categories.find(c => c.isGenerated)) {
+          categories.unshift(new Palette('Generated', { isGenerated: true }));
+        }
+        clearSelection();
         renderPalette();
         showToast('Palette imported!');
       }
@@ -801,27 +886,33 @@ function escHtml(s) {
 }
 
 // ─── Random Generator ─────────────────────────────────────────────────────────
+const rngCountEl  = document.getElementById('rng-count');
+const rngHarmSel  = document.getElementById('rng-harmony');
+const rngZonesUI  = document.getElementById('rng-zones-ui');
+const rngZonesList= document.getElementById('rng-zones-list');
+const rngAnchorArea   = document.getElementById('rng-anchor-area');
+const rngAnchorSwatch = document.getElementById('rng-anchor-swatch');
+const rngAnchorToggle = document.getElementById('rng-anchor-toggle');
+const rngGenerateBtn  = document.getElementById('rng-generate-btn');
 
-const rngResults     = document.getElementById('rng-results');
-const rngCountEl     = document.getElementById('rng-count');
-const rngHarmSel     = document.getElementById('rng-harmony');
-const rngAddAllBtn   = document.getElementById('rng-add-all-btn');
-const rngZonesUI     = document.getElementById('rng-zones-ui');
-const rngZonesList   = document.getElementById('rng-zones-list');
-const rngAnchorSwatch= document.getElementById('rng-anchor-swatch');
-const rngAnchorToggle= document.getElementById('rng-anchor-toggle');
-
-let generatedColors = [];
-let anchorEnabled   = true;
-toggleRNGAnchor();
-
-// ── Hue Zones ────────────────────────────────────────────────────────────────
+let anchorEnabled = true;
 let hueZones = [];
+
+// Anchor toggle + Generate button live in the static generator panel, so
+// they're wired up once here (they used to be re-attached on every
+// renderPalette() call when they lived inside the generated-palette header).
+rngAnchorToggle.addEventListener('click', () => {
+  anchorEnabled = !anchorEnabled;
+  rngAnchorToggle.textContent = anchorEnabled ? '🔗 Linked' : '⛓ Free';
+  rngAnchorToggle.classList.toggle('active', anchorEnabled);
+  rngAnchorArea.style.opacity = anchorEnabled ? '1' : '0.45';
+});
+rngGenerateBtn.addEventListener('click', generateColors);
 
 function zoneGradientCSS(hue, variation) {
   const steps = 12, lo = hue - variation, hi = hue + variation, stops = [];
   for (let i = 0; i <= steps; i++) {
-    const h = ((lo + (i / steps) * (hi - lo)) % 360 + 360) % 360;
+    const h = ((lo + (i/steps)*(hi-lo)) % 360 + 360) % 360;
     const rgb = hsvToRgb(h, 80, 90);
     stops.push(`rgb(${rgb.r},${rgb.g},${rgb.b})`);
   }
@@ -834,7 +925,7 @@ function renderZones() {
     return;
   }
   rngZonesList.innerHTML = hueZones.map(z => {
-    const sel = selectedSwatch && selectedSwatch.type === 'zone' && selectedSwatch.zoneId === z.id;
+    const sel = selectedSwatch?.type === 'zone' && selectedSwatch.zoneId === z.id;
     return `<div class="zone-card" data-zone="${z.id}">
       <div class="zone-gradient${sel ? ' swatch-selected' : ''}" style="background:${zoneGradientCSS(z.hue, z.variation)}"
            data-zone-grad="${z.id}" title="Click to link left panel to this zone hue"></div>
@@ -866,7 +957,6 @@ function renderZones() {
       if (sl.dataset.field === 'hue') fromHSV(z.hue, state.s, state.v);
     });
   });
-
   rngZonesList.querySelectorAll('[data-zone-grad]').forEach(el => {
     el.addEventListener('click', () => {
       const z = hueZones.find(z => z.id === el.dataset.zoneGrad);
@@ -875,11 +965,9 @@ function renderZones() {
       fromHSV(z.hue, state.s, state.v);
     });
   });
-
   rngZonesList.querySelectorAll('.zone-remove-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (selectedSwatch && selectedSwatch.type === 'zone' && selectedSwatch.zoneId === btn.dataset.zone)
-        clearSelection();
+      if (selectedSwatch?.type === 'zone' && selectedSwatch.zoneId === btn.dataset.zone) clearSelection();
       hueZones = hueZones.filter(z => z.id !== btn.dataset.zone);
       renderZones();
     });
@@ -894,26 +982,7 @@ document.getElementById('rng-add-zone-btn').addEventListener('click', () => {
   renderZones();
 });
 
-rngAnchorToggle.addEventListener('click', () => {
-  if(!anchorEnabled && !selectedSwatch) { return; }
-  anchorEnabled = !anchorEnabled;
-  rngAnchorToggle.textContent = anchorEnabled ? '🔗 Linked' : '⛓ Free';
-  rngAnchorToggle.classList.toggle('active', anchorEnabled);
-  document.getElementById('rng-anchor-area').style.opacity = anchorEnabled ? '1' : '0.45';
-});
-
-function toggleRNGAnchor() {
-  if(!anchorEnabled && !selectedSwatch) { return; }
-  anchorEnabled = !anchorEnabled;
-  rngAnchorToggle.textContent = anchorEnabled ? '🔗 Linked' : '⛓ Free';
-  rngAnchorToggle.classList.toggle('active', anchorEnabled);
-  document.getElementById('rng-anchor-area').style.opacity = anchorEnabled ? '1' : '0.45';
-}
-
-// ── Selection tracking ────────────────────────────────────────────────────────
-// selectedSwatch: null | { type:'generated', idx }
-//                         { type:'palette', catId, colorId }
-//                         { type:'zone', zoneId }
+// ─── Selection tracking ───────────────────────────────────────────────────────
 let selectedSwatch = null;
 
 function selectSwatch(type, data) {
@@ -928,35 +997,30 @@ function clearSelection() {
 function reapplySelectionHighlight() {
   if (!selectedSwatch) return;
   let el = null;
-  if (selectedSwatch.type === 'generated')
-    el = rngResults.querySelector(`[data-idx="${selectedSwatch.idx}"]`);
-  else if (selectedSwatch.type === 'palette')
+  if (selectedSwatch.type === 'palette')
     el = paletteEl.querySelector(`[data-color="${selectedSwatch.colorId}"]`);
   else if (selectedSwatch.type === 'zone')
     el = rngZonesList.querySelector(`[data-zone-grad="${selectedSwatch.zoneId}"]`);
   if (el) el.classList.add('swatch-selected');
 }
 
-// Called from render() — surgically updates selected swatch without full re-render
 function updateSelectedSwatch() {
+  // Anchor swatch lives in the static generator panel now — keep it in sync
   rngAnchorSwatch.style.background = rgbToHex(state.r, state.g, state.b);
+
   if (!selectedSwatch) return;
   const hex = rgbToHex(state.r, state.g, state.b);
 
-  if (selectedSwatch.type === 'generated') {
-    const c = generatedColors[selectedSwatch.idx];
-    if (!c || c.locked) return;
-    Object.assign(c, { r: state.r, g: state.g, b: state.b, h: state.h, s: state.s, v: state.v, hex });
-    const sw = rngResults.querySelector(`[data-idx="${selectedSwatch.idx}"]`);
-    if (sw) { sw.style.background = hex; sw.dataset.hex = hex; }
-
-  } else if (selectedSwatch.type === 'palette') {
+  if (selectedSwatch.type === 'palette') {
     const cat = categories.find(c => c.id === selectedSwatch.catId);
-    const color = cat && cat.colors.find(c => c.id === selectedSwatch.colorId);
-    if (!color) return;
-    color.hex = hex;
+    const color = cat?.findColor(selectedSwatch.colorId);
+    if (!color || color.locked) return;
+    // Update source color
+    Object.assign(color, { hex, r: state.r, g: state.g, b: state.b, h: state.h, s: state.s, v: state.v });
+    // Display = source run through filters
+    const disp = cat.getDisplayHex(color);
     const sw = paletteEl.querySelector(`[data-color="${selectedSwatch.colorId}"]`);
-    if (sw) { sw.style.background = hex; sw.dataset.hex = hex; }
+    if (sw) { sw.style.background = disp; }
 
   } else if (selectedSwatch.type === 'zone') {
     const zone = hueZones.find(z => z.id === selectedSwatch.zoneId);
@@ -972,7 +1036,7 @@ function updateSelectedSwatch() {
   }
 }
 
-// ── Generation logic ──────────────────────────────────────────────────────────
+// ─── Generation logic ─────────────────────────────────────────────────────────
 function randInRange(min, max) { return min + Math.random() * (max - min); }
 
 function pickHue() {
@@ -997,26 +1061,24 @@ function harmonyHues(baseHue, mode) {
 
 function makeColor(h, s, v) {
   const rgb = hsvToRgb(h, s, v);
-  return { h: Math.round(h), s: Math.round(s), v: Math.round(v),
-    r: rgb.r, g: rgb.g, b: rgb.b, hex: rgbToHex(rgb.r, rgb.g, rgb.b), locked: false };
+  const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+  const sw = new Swatch(hex);
+  Object.assign(sw, { h: Math.round(h), s: Math.round(s), v: Math.round(v), r: rgb.r, g: rgb.g, b: rgb.b });
+  return sw;
 }
 
 function generateFreshColors(n, harmony) {
   if (n <= 0) return [];
   const mode = harmony === 'hueZones' ? 'none' : harmony;
-
-  // ANCHORED + harmony: key off active color with exact harmonic intervals
   if (anchorEnabled && mode !== 'none') {
     const hues = harmonyHues(state.h, mode);
     return Array.from({ length: n }, (_, i) =>
       makeColor(hues[i % hues.length], randInRange(35, 92), randInRange(40, 95)));
   }
-
   if (mode === 'none') {
     return Array.from({ length: n }, () =>
       makeColor(pickHue(), randInRange(35, 95), randInRange(40, 95)));
   }
-
   const pool = [];
   let attempts = 0;
   while (pool.length < n && attempts < 200) {
@@ -1029,96 +1091,27 @@ function generateFreshColors(n, harmony) {
 }
 
 function generateColors() {
+  const genCat = categories.find(c => c.isGenerated);
+  if (!genCat) return;
   const requested = Math.max(1, Math.min(32, parseInt(rngCountEl.value) || 5));
-  const lockedCount = generatedColors.filter(c => c.locked).length;
+  const lockedCount = genCat.lockedCount();
   const count = Math.max(requested, lockedCount);
   if (count !== requested) { rngCountEl.value = count; showToast(`Count raised to ${count} to fit locked colors`); }
 
   const slots = Array.from({ length: count }, (_, i) => {
-    const e = generatedColors[i]; return e && e.locked ? e : null;
+    const e = genCat.colors[i]; return e?.locked ? e : null;
   });
   const fresh = generateFreshColors(slots.filter(s => !s).length, rngHarmSel.value);
   let fi = 0;
-  generatedColors = slots.map(s => s ? s : fresh[fi++]);
-  renderGeneratedColors();
-  rngAddAllBtn.style.display = generatedColors.length ? '' : 'none';
+  genCat.colors = slots.map(s => s ?? fresh[fi++]);
+  renderPalette();
 }
-
-function renderGeneratedColors() {
-  if (generatedColors.length === 0) {
-    rngResults.innerHTML = '<div class="rng-empty">Click Generate to create colors</div>';
-    return;
-  }
-  rngResults.innerHTML = generatedColors.map((c, i) => `
-    <div class="rng-swatch ${c.locked ? 'locked' : ''}" style="background:${c.hex}"
-         data-hex="${c.hex}" data-idx="${i}" title="${c.hex}">
-      <div class="rng-lock-btn" data-lock-idx="${i}">${c.locked ? '🔒' : '🔓'}</div>
-    </div>
-  `).join('');
-
-  rngResults.querySelectorAll('.rng-swatch').forEach(sw => {
-    sw.addEventListener('click', e => {
-      if (e.target.classList.contains('rng-lock-btn')) return;
-      selectSwatch('generated', { idx: parseInt(sw.dataset.idx) });
-      const rgb = hexToRgb(sw.dataset.hex);
-      fromRGB(rgb.r, rgb.g, rgb.b);
-    });
-    sw.addEventListener('contextmenu', e => { e.preventDefault(); openAddPicker(sw.dataset.hex); });
-  });
-
-  rngResults.querySelectorAll('.rng-lock-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const idx = parseInt(btn.dataset.lockIdx);
-      generatedColors[idx].locked = !generatedColors[idx].locked;
-      if (selectedSwatch && selectedSwatch.type === 'generated' && selectedSwatch.idx === idx && generatedColors[idx].locked)
-        clearSelection();
-      renderGeneratedColors();
-    });
-  });
-  reapplySelectionHighlight();
-}
-
-document.getElementById('rng-generate-btn').addEventListener('click', generateColors);
-rngAddAllBtn.addEventListener('click', () => openAddPickerMulti(generatedColors.map(c => c.hex)));
-
-
-// Multi-add: open picker once, add all selected hexes to chosen category
-function openAddPickerMulti(hexes) {
-  if (!hexes.length) return;
-  pendingAddHex = hexes[0]; // reuse single for preview
-  pickerPreview.style.background = `linear-gradient(to right, ${hexes.slice(0,5).join(',')})`;
-  pickerHexLabel.textContent = `${hexes.length} colors`;
-  renderPickerCategoriesMulti(hexes);
-  addPickerEl.classList.add('open');
-}
-
-function renderPickerCategoriesMulti(hexes) {
-  pickerCatsEl.innerHTML = categories.length === 0
-    ? '<div style="color:var(--text3);font-size:12px">No categories yet.</div>'
-    : categories.map(c => `
-        <button class="picker-cat-btn" data-cat="${c.id}">${c.name}
-          <span style="color:var(--text3);font-size:10px;float:right">${c.colors.length} colors</span>
-        </button>
-      `).join('');
-  pickerCatsEl.querySelectorAll('.picker-cat-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      hexes.forEach(hex => addColorToCategory(btn.dataset.cat, hex));
-      addPickerEl.classList.remove('open');
-      showToast(`Added ${hexes.length} colors`);
-    });
-  });
-}
-
-// ResizeObserver to keep canvas sharp
-new ResizeObserver(resizeCanvas).observe(rngCanvas);
-
-// Init legend
-renderHotspotLegend();
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 render();
 renderPalette();
+renderZones();
+
 </script>
 </body>
 </html>
